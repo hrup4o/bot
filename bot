@@ -1,0 +1,2991 @@
+
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using cAlgo.API;
+using cAlgo.API.Indicators;
+using Color = cAlgo.API.Color;
+
+
+// --- MACDcustom.cs интеграция ---
+public class MACDcustom : Indicator
+{
+    [Parameter("Fast EMA Period", DefaultValue = 12)]
+    public int FastPeriod { get; set; }
+
+    [Parameter("Slow EMA Period", DefaultValue = 26)]
+    public int SlowPeriod { get; set; }
+
+    [Parameter("Signal EMA Period", DefaultValue = 9)]
+    public int SignalPeriod { get; set; }
+
+    [Output("MACD", LineColor = "DodgerBlue")]
+    public IndicatorDataSeries Macd { get; set; }
+
+    [Output("Signal", LineColor = "Orange")]
+    public IndicatorDataSeries Signal { get; set; }
+
+    [Output("Histogram", LineColor = "LimeGreen")]
+    public IndicatorDataSeries Histogram { get; set; }
+
+    private ExponentialMovingAverage _fastEma;
+    private ExponentialMovingAverage _slowEma;
+    private ExponentialMovingAverage _signalEma;
+
+    protected override void Initialize()
+    {
+        Macd = CreateDataSeries();
+        Signal = CreateDataSeries();
+        Histogram = CreateDataSeries();
+
+        _fastEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, FastPeriod);
+        _slowEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, SlowPeriod);
+        _signalEma = Indicators.ExponentialMovingAverage(Macd, SignalPeriod);
+    }
+
+    public override void Calculate(int index)
+    {
+        Macd[index] = _fastEma.Result[index] - _slowEma.Result[index];
+        Signal[index] = _signalEma.Result[index];
+        Histogram[index] = Macd[index] - Signal[index];
+    }
+}
+
+// --- Zone Analysis Logger ---
+internal class LookbackEntry
+{
+    public int BarIndex { get; set; }
+    public DateTime Time { get; set; }
+    public string TimeFrame { get; set; }
+    public int Lookback { get; set; }
+    public double RSIMacdDistance { get; set; }
+    public double RSISignalDistance { get; set; }
+    public double RSIHistogramDistance { get; set; }
+    public double RSIMacdSlopeDeg { get; set; }
+    public double RSIMacdDelta { get; set; }
+    public double RSISignalSlopeDeg { get; set; }
+    public double RSISignalDelta { get; set; }
+    public double HistogramDelta { get; set; }
+    public bool RSIAboveMACD { get; set; }
+    public bool RSIAboveSignal { get; set; }
+    public bool RSIAboveHistogram { get; set; }
+    public bool MACDCrossedAboveSignal { get; set; }
+    public bool RSIMACDCrossed { get; set; }
+    public bool RSISignalCrossed { get; set; }
+    public double RsiMACDSpread { get; set; }
+    public double RsiMACDSpreadDelta { get; set; }
+    public double SpreadAcceleration { get; set; }
+    public double RsiSlope { get; set; }
+    public double MacdSlope { get; set; }
+    public double RsiSlopeDeg { get; set; }
+    public double MacdSlopeDeg { get; set; }
+    public double SlopeDiff { get; set; }
+    public double RsiAcceleration { get; set; }
+    public double MacdAcceleration { get; set; }
+    public double RsiMacdSlopeDiff { get; set; }
+    public double HistSlope { get; set; }
+    public double HistSlopeDeg { get; set; }
+    public double HistAcceleration { get; set; }
+    public double MacdSignalSlope { get; set; }
+    public double MacdSignalSlopeDeg { get; set; }
+    public double MacdSpreadAcceleration { get; set; }
+    public double MacdLineSpread { get; set; }
+    public double DeltaRSIMACDDistance { get; set; }
+    public bool RsiMacdCross { get; set; }
+    public bool RsiCrossesAboveMacd { get; set; }
+    public bool RsiCrossesBelowMacd { get; set; }
+    public double WCloseMinusHMA { get; set; }
+    public double WCloseDistNorm { get; set; }
+    public double WCloseMedianSpread { get; set; }
+    public double Body { get; set; }
+    public double BodyNorm { get; set; }
+    public double BodyRatio { get; set; }
+    public double BodyRatioDev1 { get; set; }
+    public double BodyRatioDev5 { get; set; }
+    public double BodyRatioDev1Norm { get; set; }
+    public double BodyRatioDev5Norm { get; set; }
+    public double Range { get; set; }
+    public double RangeNorm { get; set; }
+    public double VolumeData { get; set; }
+    public double VolumeNorm { get; set; }
+    public double VolumePriceRatio { get; set; }
+    public double VolumePriceRatioNorm { get; set; }
+    public double Momentum { get; set; }
+    public double MomentumNorm { get; set; }
+    public double MomentumRatio { get; set; }
+    public double MomentumRatioNorm { get; set; }
+    public double PriceSlope { get; set; }
+    public double PriceSlopeNorm { get; set; }
+    public double ZScoreVolume { get; set; }
+    public double ZScoreVolumeNorm { get; set; }
+    public double ZScoreRSI { get; set; }
+    public double ZScoreRSINorm { get; set; }
+    public double UpperWick { get; set; }
+    public double UpperWickRatio { get; set; }
+    public double UpperWickRatioNorm { get; set; }
+    public double LowerWick { get; set; }
+    public double LowerWickRatio { get; set; }
+    public double LowerWickRatioNorm { get; set; }
+    public double Symmetry { get; set; }
+    public double SymmetryNorm { get; set; }
+    public double HmaSlope { get; set; }
+    public double HmaSlopeNorm { get; set; }
+    public double HmaAngle { get; set; }
+    public double HmaAngleNorm { get; set; }
+    public double PriceAngle { get; set; }
+    public double PriceAngleNorm { get; set; }
+    public double HmaCloseDistance { get; set; }
+    public double HmaCloseDistanceNorm { get; set; }
+    public double ATR { get; set; }
+    public double ATRNorm { get; set; }
+    public double EMA { get; set; }
+    public double EMANorm { get; set; }
+    public double EMADistance { get; set; }
+    public double EMADistanceNorm { get; set; }
+    public double CompositeScore { get; set; }
+    public double CompositeScoreNorm { get; set; }
+    public double MicroScore { get; set; }
+    public double MicroScoreNorm { get; set; }
+    public double Delta { get; set; }
+    public double DeltaNorm { get; set; }
+    public double DeltaOverRange { get; set; }
+    public double DeltaOverRangeNorm { get; set; }
+    public double PriceDelta { get; set; }
+    public double PriceDeltaNorm { get; set; }
+    public double DeltaPriceRatio { get; set; }
+    public double DeltaPriceRatioNorm { get; set; }
+    public double MomentumAccel { get; set; }
+    public double MomentumAccelNorm { get; set; }
+    public double MomentumShift { get; set; }
+    public double MomentumShiftNorm { get; set; }
+    public double MomentumNow { get; set; }
+    public double MomentumStart { get; set; }
+    public double MomentumPrev { get; set; }
+    public double MomentumDelta { get; set; }
+    public double MomentumSlope { get; set; }
+    public double PrevMomentumNorm { get; set; }
+    public double HighWickRatio { get; set; }
+    public double WickImbalanceRatio { get; set; }
+    public double WickImbalanceRatioNorm { get; set; }
+    public int WickCountLast5 { get; set; }
+    public double AvgBodyLast5 { get; set; }
+    public int TotalWickImbalance { get; set; }
+    public bool HasBodyRatioSpike { get; set; }
+    public int IsEngulfingShape { get; set; }
+    public int IsReversalSignal { get; set; }
+    public double OpenHA { get; set; }
+    public double HighHA { get; set; }
+    public double LowHA { get; set; }
+    public double CloseHA { get; set; }
+    public double HaClose { get; set; }
+    public double HaOpen { get; set; }
+    public double HaHigh { get; set; }
+    public double HaLow { get; set; }
+    public double HeikinAshiDelta { get; set; }
+    public double HeikinAshiDeltaNorm { get; set; }
+    public double Open { get; set; }
+    public double High { get; set; }
+    public double Low { get; set; }
+    public double Close { get; set; }
+    public double TickVolume { get; set; }
+    public int UpperWickImbalanceCount { get; set; }
+    public int LowerWickImbalanceCount { get; set; }
+    public double SpreadData { get; set; }
+    public double BidAsk { get; set; }
+}
+
+
+
+
+
+// Centralized analyzer with raw metric tracking only — no logic, no interpretations
+public class IndicatorAnalyzer : IDisposable
+{
+    public double RsiSlope { get; set; }
+    public double MacdSlope { get; set; }
+    public double RsiDelta { get; set; }
+    public double MacdDelta { get; set; }
+    public double RsiSlopeDeg { get; set; }
+    public double MacdSlopeDeg { get; set; }
+    public double SlopeDiff { get; set; }
+    public double RsiMacdSlopeDiff { get; set; }
+    public double RsiAcceleration { get; set; }
+    public double MacdAcceleration { get; set; }
+    public double RsiMACDSpread { get; set; }
+    public double RsiMACDSpreadDelta { get; set; }
+    public bool RsiMacdCross { get; set; }
+    public bool RsiCrossesAboveMacd { get; set; }
+    public bool RsiCrossesBelowMacd { get; set; }
+    public double AvgRSIMACDDistance { get; set; }
+    public double DeltaRSIMACDDistance { get; set; }
+    public double MacdLineSpread { get; set; }
+    public double MacdSpreadAcceleration { get; set; }
+    public double MacdSignalSlope { get; set; }
+    public double MacdSignalSlopeDeg { get; set; }
+    public double HistDelta { get; set; }
+    public double HistSlope { get; set; }
+    public double HistSlopeDeg { get; set; }
+    public double HistStrength { get; set; }
+    public double HistAcceleration { get; set; }
+    public bool HistogramDivergence { get; set; }
+    public double WCloseMinusHMA { get; set; }
+    public double WCloseDistNorm { get; set; }
+    public double WCloseMedianSpread { get; set; }
+
+    public class LookbackMetrics
+    {
+        public int BarIndex { get; set; }
+        public DateTime Time { get; set; }
+        public string TimeFrame { get; set; }
+        public int Lookback { get; set; }
+        public double RSIMacdDistance { get; set; }
+        public double RSISignalDistance { get; set; }
+        public double RSIHistogramDistance { get; set; }
+        public double RSIMacdSlopeDeg { get; set; }
+        public double RSIMacdDelta { get; set; }
+        public double RSISignalSlopeDeg { get; set; }
+        public double RSISignalDelta { get; set; }
+        public double HistogramDelta { get; set; }
+        public bool RSIAboveMACD { get; set; }
+        public bool RSIAboveSignal { get; set; }
+        public bool RSIAboveHistogram { get; set; }
+        public bool MACDCrossedAboveSignal { get; set; }
+        public bool RSIMACDCrossed { get; set; }
+        public bool RSISignalCrossed { get; set; }
+        public double RsiMACDSpread { get; set; }
+        public double RsiMACDSpreadDelta { get; set; }
+        public double SpreadAcceleration { get; set; }
+        public double RsiSlope { get; set; }
+        public double MacdSlope { get; set; }
+        public double RsiSlopeDeg { get; set; }
+        public double MacdSlopeDeg { get; set; }
+        public double SlopeDiff { get; set; }
+        public double RsiAcceleration { get; set; }
+        public double MacdAcceleration { get; set; }
+        public double RsiMacdSlopeDiff { get; set; }
+        public double HistSlope { get; set; }
+        public double HistSlopeDeg { get; set; }
+        public double HistAcceleration { get; set; }
+        public double MacdSignalSlope { get; set; }
+        public double MacdSignalSlopeDeg { get; set; }
+        public double MacdSpreadAcceleration { get; set; }
+        public double MacdLineSpread { get; set; }
+        public double DeltaRSIMACDDistance { get; set; }
+        public bool RsiMacdCross { get; set; }
+        public bool RsiCrossesAboveMacd { get; set; }
+        public bool RsiCrossesBelowMacd { get; set; }
+        public double WCloseMinusHMA { get; set; }
+        public double WCloseDistNorm { get; set; }
+        public double WCloseMedianSpread { get; set; }
+
+
+        // --- Допълнителни метрики ---
+        public double Body { get; set; }
+        public double BodyNorm { get; set; }
+        public double BodyRatio { get; set; }
+        public double BodyRatioDev1 { get; set; }
+        public double BodyRatioDev5 { get; set; }
+        public double BodyRatioDev1Norm { get; set; }
+        public double BodyRatioDev5Norm { get; set; }
+        public double Range { get; set; }
+        public double RangeNorm { get; set; }
+        public double VolumeData { get; set; }
+        public double VolumeNorm { get; set; }
+        public double VolumePriceRatio { get; set; }
+        public double VolumePriceRatioNorm { get; set; }
+        public double Momentum { get; set; }
+        public double MomentumNorm { get; set; }
+        public double MomentumRatio { get; set; }
+        public double MomentumRatioNorm { get; set; }
+        public double PriceSlope { get; set; }
+        public double PriceSlopeNorm { get; set; }
+        public double ZScoreVolume { get; set; }
+        public double ZScoreVolumeNorm { get; set; }
+        public double ZScoreRSI { get; set; }
+        public double ZScoreRSINorm { get; set; }
+        public double UpperWick { get; set; }
+        public double UpperWickRatio { get; set; }
+        public double UpperWickRatioNorm { get; set; }
+        public double LowerWick { get; set; }
+        public double LowerWickRatio { get; set; }
+        public double LowerWickRatioNorm { get; set; }
+        public double Symmetry { get; set; }
+        public double SymmetryNorm { get; set; }
+        public double HmaSlope { get; set; }
+        public double HmaSlopeNorm { get; set; }
+        public double HmaAngle { get; set; }
+        public double HmaAngleNorm { get; set; }
+        public double PriceAngle { get; set; }
+        public double PriceAngleNorm { get; set; }
+        public double HmaCloseDistance { get; set; }
+        public double HmaCloseDistanceNorm { get; set; }
+        public double ATR { get; set; }
+        public double ATRNorm { get; set; }
+        public double EMA { get; set; }
+        public double EMANorm { get; set; }
+        public double EMADistance { get; set; }
+        public double EMADistanceNorm { get; set; }
+        public double CompositeScore { get; set; }
+        public double CompositeScoreNorm { get; set; }
+        public double MicroScore { get; set; }
+        public double MicroScoreNorm { get; set; }
+        public double Delta { get; set; }
+        public double DeltaNorm { get; set; }
+        public double DeltaOverRange { get; set; }
+        public double DeltaOverRangeNorm { get; set; }
+        public double PriceDelta { get; set; }
+        public double PriceDeltaNorm { get; set; }
+        public double DeltaPriceRatio { get; set; }
+        public double DeltaPriceRatioNorm { get; set; }
+        public double MomentumAccel { get; set; }
+        public double MomentumAccelNorm { get; set; }
+        public double MomentumShift { get; set; }
+        public double MomentumShiftNorm { get; set; }
+        // --- Momentum raw metrics ---
+        public double MomentumNow { get; set; }
+        public double MomentumStart { get; set; }
+        public double MomentumPrev { get; set; }
+        public double MomentumDelta { get; set; }
+        public double MomentumSlope { get; set; }
+        public double PrevMomentumNorm { get; set; }
+        public double HighWickRatio { get; set; }
+        public double WickImbalanceRatio { get; set; }
+        public double WickImbalanceRatioNorm { get; set; }
+        public int WickCountLast5 { get; set; }
+        public double AvgBodyLast5 { get; set; }
+        public int TotalWickImbalance { get; set; }
+        public bool HasBodyRatioSpike { get; set; }
+        public int IsEngulfingShape { get; set; }
+        public int IsReversalSignal { get; set; }
+        // --- Heikin Ashi ---
+        public double OpenHA { get; set; }
+        public double HighHA { get; set; }
+        public double LowHA { get; set; }
+        public double CloseHA { get; set; }
+        public double HaClose { get; set; }
+        public double HaOpen { get; set; }
+        public double HaHigh { get; set; }
+        public double HaLow { get; set; }
+        public double HeikinAshiDelta { get; set; }
+        public double HeikinAshiDeltaNorm { get; set; }
+    }
+
+
+public List<LookbackMetrics> AnalyzeLookbacks(int[] lookbacks = null, int targetIndex = -1)
+{
+    if (lookbacks == null) lookbacks = new int[] { 1, 2, 3, 5, 8, 12, 14, 20, 30, 40, 50, 60 };
+    var results = new List<LookbackMetrics>();
+
+    // Използваме данните от Bars директно ако кешовете са празни
+    if (rsiCache.Count == 0 && Bars != null)
+    {
+        return results; // Връщаме празен резултат ако няма данни
+    }
+
+    // Определяме диапазона на индексите за анализ
+    int startIdx = targetIndex > 0 ? Math.Max(0, targetIndex - lookbacks.Max()) : 0;
+    int endIdx = targetIndex > 0 ? targetIndex : rsiCache.Count - 1;
+
+    // Calculate ATR for normalization
+    double[] atrArr = new double[priceCache.Count];
+    for (int i = 14; i < priceCache.Count; i++)
+    {
+        double[] trValues = new double[14];
+        for (int j = 0; j < 14; j++)
+        {
+            int idx = i - j;
+            double high = Math.Max(priceCache[idx], priceCache[idx - 1]);
+            double low = Math.Min(priceCache[idx], priceCache[idx - 1]);
+            double prevClose = idx > 0 ? priceCache[idx - 1] : priceCache[idx];
+            trValues[j] = Math.Max(high - low, Math.Max(Math.Abs(high - prevClose), Math.Abs(low - prevClose)));
+        }
+        atrArr[i] = trValues.Average();
+    }
+
+    double haOpenPrev = double.NaN;
+    double haClosePrev = double.NaN;
+
+    // Генерираме метрики за всеки бар в диапазона
+    for (int currentIdx = startIdx; currentIdx <= endIdx; currentIdx++)
+    {
+        for (int l = 0; l < lookbacks.Length; l++)
+        {
+            int lb = lookbacks[l];
+            if (currentIdx < lb + 3 || rsiCache.Count <= currentIdx || macdCache.Count <= currentIdx || signalCache.Count <= currentIdx || priceCache.Count <= currentIdx || weightedCloseCache.Count <= currentIdx)
+                continue;
+
+            int idxLast = currentIdx;
+            int idxLbBack = currentIdx - lb;
+            int idxSecondLast = currentIdx - 1;
+            int idxLbBackMinus1 = currentIdx - lb - 1;
+
+        // Price data
+        double open = priceCache[idxLbBack];
+        double close = priceCache[idxLast];
+        double high = priceCache[idxLbBack];
+        double low = priceCache[idxLbBack];
+        for (int i = idxLbBack; i <= idxLast; i++)
+        {
+            if (priceCache[i] > high) high = priceCache[i];
+            if (priceCache[i] < low) low = priceCache[i];
+        }
+        double prevClose = idxLast > 0 ? priceCache[idxLast - 1] : close;
+
+        // ATR for normalization
+        double currentAtr = idxLast < atrArr.Length ? atrArr[idxLast] : (high - low);
+        if (currentAtr == 0) currentAtr = 0.0001; // Avoid division by zero
+
+        // Basic metrics
+        double body = Math.Abs(close - open);
+        double range = high - low;
+        double bodyRatio = range > 0 ? body / range : 0;
+        double upperWick = high - Math.Max(close, open);
+        double lowerWick = Math.Min(close, open) - low;
+        double upperWickRatio = range > 0 ? upperWick / range : 0;
+        double lowerWickRatio = range > 0 ? lowerWick / range : 0;
+        double symmetry = Math.Abs(upperWickRatio - lowerWickRatio);
+
+        // Volume metrics (using tick volumes)
+        double volume = 1000; // Default if no volume data
+        if (Bars != null && Bars.TickVolumes.Count > idxLast)
+        {
+            volume = Bars.TickVolumes.Skip(idxLbBack).Take(lb + 1).Sum();
+        }
+        double volumePriceRatio = range > 0 ? volume / range : 0;
+
+        // Z-Score calculations (20-period window)
+        double zScoreVolume = 0;
+        double zScoreRSI = 0;
+        int zScorePeriod = Math.Min(20, idxLast);
+        if (zScorePeriod > 1)
+        {
+            // Volume Z-Score
+            if (Bars != null && Bars.TickVolumes.Count > idxLast)
+            {
+                var volumeWindow = Bars.TickVolumes.Skip(idxLast - zScorePeriod).Take(zScorePeriod).ToArray();
+                double volMean = volumeWindow.Average();
+                double volStd = Math.Sqrt(volumeWindow.Select(v => Math.Pow(v - volMean, 2)).Average());
+                if (volStd > 0)
+                    zScoreVolume = (Bars.TickVolumes[idxLast] - volMean) / volStd;
+            }
+
+            // RSI Z-Score
+            var rsiWindow = rsiCache.Skip(idxLast - zScorePeriod).Take(zScorePeriod).ToArray();
+            double rsiMean = rsiWindow.Average();
+            double rsiStd = Math.Sqrt(rsiWindow.Select(r => Math.Pow(r - rsiMean, 2)).Average());
+            if (rsiStd > 0)
+                zScoreRSI = (rsiCache[idxLast] - rsiMean) / rsiStd;
+        }
+
+        // HMA metrics
+        double hmaSlope = weightedCloseCache[idxLast] - weightedCloseCache[idxLbBack];
+        double hmaAngle = Math.Atan2(hmaSlope, lb) * (180 / Math.PI);
+        double priceSlope = close - open;
+        double priceAngle = Math.Atan2(priceSlope, lb) * (180 / Math.PI);
+        double hmaCloseDistance = Math.Abs(weightedCloseCache[idxLast] - close);
+
+        // EMA calculation (21-period)
+        double ema = close; // Start with current close
+        if (idxLast >= 21)
+        {
+            double multiplier = 2.0 / (21 + 1);
+            ema = priceCache[idxLast - 21];
+            for (int i = idxLast - 20; i <= idxLast; i++)
+            {
+                ema = (priceCache[i] * multiplier) + (ema * (1 - multiplier));
+            }
+        }
+        double emaDistance = Math.Abs(close - ema);
+
+        // Composite scores
+        double microScore = bodyRatio + (1 - symmetry);
+        double compositeScore = 0.6 * bodyRatio + 0.4 * (1 - symmetry);
+
+        // Delta calculations
+        double delta = close - open;
+        double priceDelta = close - open;
+        double deltaPriceRatio = Math.Abs(priceDelta) > 0.0001 ? delta / priceDelta : 0;
+        double deltaOverRange = range > 0 ? delta / range : 0;
+
+        // Momentum calculations
+        double momentum = close - prevClose;
+        double momentumRatio = Math.Abs(priceDelta) > 0.0001 ? momentum / priceDelta : 0;
+        double momentumAccel = 0;
+        double momentumShift = 0;
+
+        // Calculate momentum metrics
+        double momentumNow = 0, momentumStart = 0, momentumPrev = 0, momentumDelta = 0, momentumSlope = 0;
+        if (idxLast >= 3)
+        {
+            momentumNow = priceCache[idxLast] - priceCache[idxLast - 1];
+            momentumPrev = priceCache[idxLast - 1] - priceCache[idxLast - 2];
+            momentumShift = momentumNow - momentumPrev;
+
+            if (idxLast >= 4)
+            {
+                double momentumPrev2 = priceCache[idxLast - 2] - priceCache[idxLast - 3];
+                momentumAccel = (momentumNow - momentumPrev) - (momentumPrev - momentumPrev2);
+            }
+        }
+
+        if (idxLbBack >= 1)
+        {
+            momentumStart = priceCache[idxLbBack] - priceCache[idxLbBack - 1];
+            momentumDelta = momentumNow - momentumStart;
+            momentumSlope = lb > 0 ? (momentumNow - momentumStart) / lb : 0;
+        }
+
+        // Wick analysis for last 5 bars
+        int wickCountLast5 = 0;
+        double avgBodyLast5 = 0;
+        double wickImbalanceRatio = (upperWick + lowerWick) / (range + 1e-6);
+
+        if (idxLast >= 5)
+        {
+            double[] bodies = new double[5];
+            int wickCount = 0;
+
+            for (int i = 0; i < 5; i++)
+            {
+                int idx = idxLast - i;
+                double barHigh = priceCache[idx];
+                double barLow = priceCache[idx];
+                double barOpen = idx > 0 ? priceCache[idx - 1] : priceCache[idx];
+                double barClose = priceCache[idx];
+
+                // Approximate high/low from price movements
+                double barRange = Math.Abs(barClose - barOpen) * 1.5; // Estimate
+                double barUpperWick = barRange * 0.3; // Estimate
+                double barLowerWick = barRange * 0.3; // Estimate
+
+                bodies[i] = Math.Abs(barClose - barOpen);
+
+                if (barUpperWick / (barRange + 1e-6) > 0.3 || barLowerWick / (barRange + 1e-6) > 0.3)
+                    wickCount++;
+            }
+
+            wickCountLast5 = wickCount;
+            avgBodyLast5 = bodies.Average();
+        }
+
+        // Body ratio deviations
+        double bodyRatioDev1 = 0;
+        double bodyRatioDev5 = 0;
+
+        if (idxLast >= 5)
+        {
+            // Calculate 5-period SMA of body ratios
+            double[] bodyRatios = new double[5];
+            for (int i = 0; i < 5; i++)
+            {
+                int idx = idxLast - i;
+                double barOpen = idx > 0 ? priceCache[idx - 1] : priceCache[idx];
+                double barClose = priceCache[idx];
+                double barBody = Math.Abs(barClose - barOpen);
+                double barRange = Math.Abs(barClose - barOpen) * 1.5; // Estimate range
+                bodyRatios[i] = barRange > 0 ? barBody / barRange : 0;
+            }
+            double avgBodyRatio5 = bodyRatios.Average();
+            bodyRatioDev1 = bodyRatio - avgBodyRatio5;
+        }
+
+        if (idxLast >= 20)
+        {
+            // Calculate 20-period SMA of body ratios
+            double[] bodyRatios = new double[20];
+            for (int i = 0; i < 20; i++)
+            {
+                int idx = idxLast - i;
+                double barOpen = idx > 0 ? priceCache[idx - 1] : priceCache[idx];
+                double barClose = priceCache[idx];
+                double barBody = Math.Abs(barClose - barOpen);
+                double barRange = Math.Abs(barClose - barOpen) * 1.5; // Estimate range
+                bodyRatios[i] = barRange > 0 ? barBody / barRange : 0;
+            }
+            double avgBodyRatio20 = bodyRatios.Average();
+            bodyRatioDev5 = bodyRatio - avgBodyRatio20;
+        }
+
+        // High wick ratio calculation
+        double highWickRatio = (upperWick + lowerWick) / (range + 1e-6);
+
+        // Total wick imbalance
+        int totalWickImbalance = Math.Abs(wickCountLast5 - 2); // Deviation from balanced
+
+        // Previous momentum normalization
+        double prevMomentumNorm = 0;
+        if (idxLast >= 2 && Math.Abs(priceCache[idxLast - 2]) > 1e-6)
+        {
+            prevMomentumNorm = momentumPrev / priceCache[idxLast - 2];
+        }
+
+        // Heikin Ashi calculations
+        double open_ha = open;
+        double high_ha = high;
+        double low_ha = low;
+        double close_ha = close;
+        double haClose = (open_ha + high_ha + low_ha + close_ha) / 4.0;
+
+        if (l == 0 || double.IsNaN(haOpenPrev) || double.IsNaN(haClosePrev))
+        {
+            haOpenPrev = (open_ha + close_ha) / 2;
+            haClosePrev = haClose;
+        }
+
+        double haOpen = (haOpenPrev + haClosePrev) / 2.0;
+        double haHigh = Math.Max(high_ha, Math.Max(haOpen, haClose));
+        double haLow = Math.Min(low_ha, Math.Min(haOpen, haClose));
+        double heikinAshiDelta = haClose - haOpen;
+
+        haOpenPrev = haOpen;
+        haClosePrev = haClose;
+
+        // Indicator-based metrics
+        double rsiMacdDistance = rsiCache[idxLast] - macdCache[idxLast];
+        double rsiSignalDistance = rsiCache[idxLast] - signalCache[idxLast];
+        double rsiHistogramDistance = rsiCache[idxLast] - (macdCache[idxLast] - signalCache[idxLast]);
+        double rsiMacdSlopeDeg = Math.Atan2(rsiCache[idxLast] - macdCache[idxLast], lb) * (180.0 / Math.PI);
+        double rsiMacdDelta = (rsiCache[idxLast] - macdCache[idxLast]) - (rsiCache[idxLbBack] - macdCache[idxLbBack]);
+        double rsiSignalSlopeDeg = Math.Atan2(rsiCache[idxLast] - signalCache[idxLast], lb) * (180.0 / Math.PI);
+        double rsiSignalDelta = (rsiCache[idxLast] - signalCache[idxLast]) - (rsiCache[idxLbBack] - signalCache[idxLbBack]);
+        double histogramDelta = (macdCache[idxLast] - signalCache[idxLast]) - (macdCache[idxLbBack] - signalCache[idxLbBack]);
+
+        bool rsiAboveMACD = rsiCache[idxLast] > macdCache[idxLast];
+        bool rsiAboveSignal = rsiCache[idxLast] > signalCache[idxLast];
+        bool rsiAboveHistogram = rsiCache[idxLast] > (macdCache[idxLast] - signalCache[idxLast]);
+        bool macdCrossedAboveSignal = macdCache[idxLast - 1] < signalCache[idxLast - 1] && macdCache[idxLast] > signalCache[idxLast];
+        bool rsiMACDCrossed = (rsiCache[idxLast - 1] - macdCache[idxLast - 1]) * (rsiCache[idxLast] - macdCache[idxLast]) < 0;
+        bool rsiSignalCrossed = (rsiCache[idxLast - 1] - signalCache[idxLast - 1]) * (rsiCache[idxLast] - signalCache[idxLast]) < 0;
+        bool rsiMacdCross = (rsiCache[idxLast - 1] - macdCache[idxLast - 1]) * (rsiCache[idxLast] - macdCache[idxLast]) < 0;
+        bool rsiCrossesAboveMacd = (rsiCache[idxLast - 1] < macdCache[idxLast - 1]) && (rsiCache[idxLast] > macdCache[idxLast]);
+        bool rsiCrossesBelowMacd = (rsiCache[idxLast - 1] > macdCache[idxLast - 1]) && (rsiCache[idxLast] < macdCache[idxLast]);
+
+        double wCloseMinusHMA = weightedCloseCache[idxLast] - weightedCloseCache[idxLbBack];
+        double wCloseDistNorm = wCloseMinusHMA / (weightedCloseCache[idxLast] + 1e-6); // HMA normalization
+        double wCloseMedianSpread = weightedCloseCache[idxLast] - ((high + low) / 2);
+
+        results.Add(new LookbackMetrics
+        {
+            BarIndex = currentIdx,
+            Time = Bars != null && Bars.OpenTimes.Count > currentIdx ? Bars.OpenTimes[currentIdx] : DateTime.Now,
+            TimeFrame = "Unknown",
+            Lookback = lb,
+            RSIMacdDistance = rsiMacdDistance,
+            RSISignalDistance = rsiSignalDistance,
+            RSIHistogramDistance = rsiHistogramDistance,
+            RSIMacdSlopeDeg = rsiMacdSlopeDeg,
+            RSIMacdDelta = rsiMacdDelta,
+            RSISignalSlopeDeg = rsiSignalSlopeDeg,
+            RSISignalDelta = rsiSignalDelta,
+            HistogramDelta = histogramDelta,
+            RSIAboveMACD = rsiAboveMACD,
+            RSIAboveSignal = rsiAboveSignal,
+            RSIAboveHistogram = rsiAboveHistogram,
+            MACDCrossedAboveSignal = macdCrossedAboveSignal,
+            RSIMACDCrossed = rsiMACDCrossed,
+            RSISignalCrossed = rsiSignalCrossed,
+            RsiMACDSpread = rsiMacdDistance,
+            RsiMACDSpreadDelta = rsiMacdDelta,
+            SpreadAcceleration = ((rsiCache[idxLast] - macdCache[idxLast]) - (rsiCache[idxLbBack] - macdCache[idxLbBack]))
+                - ((rsiCache[idxLast - 1] - macdCache[idxLast - 1]) - (rsiCache[idxLbBackMinus1] - macdCache[idxLbBackMinus1])),
+            RsiSlope = (rsiCache[idxLast] - rsiCache[idxLbBack]) / lb,
+            MacdSlope = (macdCache[idxLast] - macdCache[idxLbBack]) / lb,
+            RsiSlopeDeg = Math.Atan2(rsiCache[idxLast] - rsiCache[idxLbBack], lb) * (180.0 / Math.PI),
+            MacdSlopeDeg = Math.Atan2(macdCache[idxLast] - macdCache[idxLbBack], lb) * (180.0 / Math.PI),
+            SlopeDiff = Math.Abs(Math.Atan2(rsiCache[idxLast] - rsiCache[idxLbBack], lb) - Math.Atan2(macdCache[idxLast] - macdCache[idxLbBack], lb)),
+            RsiAcceleration = ((rsiCache[idxLast] - rsiCache[idxLbBack]) / lb) - ((rsiCache[idxLast - 1] - rsiCache[idxLbBackMinus1]) / lb),
+            MacdAcceleration = ((macdCache[idxLast] - macdCache[idxLbBack]) / lb) - ((macdCache[idxLast - 1] - macdCache[idxLbBackMinus1]) / lb),
+            RsiMacdSlopeDiff = ((rsiCache[idxLast] - rsiCache[idxLbBack]) / lb) - ((macdCache[idxLast] - macdCache[idxLbBack]) / lb),
+            HistSlope = Math.Atan2((macdCache[idxLast] - signalCache[idxLast]) - (macdCache[idxLbBack] - signalCache[idxLbBack]), lb),
+            HistSlopeDeg = Math.Atan2((macdCache[idxLast] - signalCache[idxLast]) - (macdCache[idxLbBack] - signalCache[idxLbBack]), lb) * (180.0 / Math.PI),
+            HistAcceleration = ((macdCache[idxLast] - signalCache[idxLast]) - (macdCache[idxLbBack] - signalCache[idxLbBack])) - ((macdCache[idxLast - 1] - signalCache[idxLast - 1]) - (macdCache[idxLbBackMinus1] - signalCache[idxLbBackMinus1])),
+            MacdSignalSlope = Math.Atan2(macdCache[idxLast] - signalCache[idxLast], lb),
+            MacdSignalSlopeDeg = Math.Atan2(macdCache[idxLast] - signalCache[idxLast], lb) * (180.0 / Math.PI),
+            MacdSpreadAcceleration = ((macdCache[idxLast] - signalCache[idxLast]) - (macdCache[idxLbBack] - signalCache[idxLbBack])) - ((macdCache[idxLast - 1] - signalCache[idxLast - 1]) - (macdCache[idxLbBackMinus1] - signalCache[idxLbBackMinus1])),
+            MacdLineSpread = macdCache[idxLast] - signalCache[idxLast],
+            DeltaRSIMACDDistance = Math.Abs(rsiCache[idxLast] - macdCache[idxLast]) - Math.Abs(rsiCache[idxLbBack] - macdCache[idxLbBack]),
+            RsiMacdCross = rsiMacdCross,
+            RsiCrossesAboveMacd = rsiCrossesAboveMacd,
+            RsiCrossesBelowMacd = rsiCrossesBelowMacd,
+            WCloseMinusHMA = wCloseMinusHMA,
+            WCloseDistNorm = wCloseDistNorm,
+            WCloseMedianSpread = wCloseMedianSpread,
+
+            // ATR-normalized metrics (price-related)
+            Body = body,
+            BodyNorm = body / currentAtr,
+            Range = range,
+            RangeNorm = range / currentAtr,
+            UpperWick = upperWick,
+            LowerWick = lowerWick,
+            HmaCloseDistance = hmaCloseDistance,
+            HmaCloseDistanceNorm = hmaCloseDistance / currentAtr,
+            EMADistance = emaDistance,
+            EMADistanceNorm = emaDistance / currentAtr,
+            ATR = currentAtr,
+            ATRNorm = currentAtr / currentAtr, // Always 1
+            MomentumAccel = momentumAccel,
+            MomentumAccelNorm = momentumAccel / currentAtr,
+            MomentumShift = momentumShift,
+            MomentumShiftNorm = momentumShift / currentAtr,
+            PriceSlope = priceSlope,
+            PriceSlopeNorm = priceSlope / currentAtr,
+            Delta = delta,
+            DeltaNorm = delta / currentAtr,
+            PriceDelta = priceDelta,
+            PriceDeltaNorm = priceDelta / currentAtr,
+
+            // Close-normalized metrics (ratios)
+            BodyRatio = bodyRatio,
+            BodyRatioDev1 = bodyRatioDev1,
+            BodyRatioDev5 = bodyRatioDev5,
+            BodyRatioDev1Norm = bodyRatioDev1 / (close + 1e-6),
+            BodyRatioDev5Norm = bodyRatioDev5 / (close + 1e-6),
+            UpperWickRatio = upperWickRatio,
+            UpperWickRatioNorm = upperWickRatio / (close + 1e-6),
+            LowerWickRatio = lowerWickRatio,
+            LowerWickRatioNorm = lowerWickRatio / (close + 1e-6),
+            Symmetry = symmetry,
+            SymmetryNorm = symmetry / (close + 1e-6),
+            Volume = volume,
+            VolumeNorm = volume / (close + 1e-6),
+            VolumePriceRatio = volumePriceRatio,
+            VolumePriceRatioNorm = volumePriceRatio / (close + 1e-6),
+            MomentumRatio = momentumRatio,
+            MomentumRatioNorm = momentumRatio / (close + 1e-6),
+            ZScoreVolume = zScoreVolume,
+            ZScoreVolumeNorm = zScoreVolume / (close + 1e-6),
+            ZScoreRSI = zScoreRSI,
+            ZScoreRSINorm = zScoreRSI / (close + 1e-6),
+            CompositeScore = compositeScore,
+            CompositeScoreNorm = compositeScore / (close + 1e-6),
+            MicroScore = microScore,
+            MicroScoreNorm = microScore / (close + 1e-6),
+            DeltaPriceRatio = deltaPriceRatio,
+            DeltaPriceRatioNorm = deltaPriceRatio / (close + 1e-6),
+            HmaAngle = hmaAngle,
+            HmaAngleNorm = hmaAngle / (close + 1e-6),
+            PriceAngle = priceAngle,
+            PriceAngleNorm = priceAngle / (close + 1e-6),
+            EMA = ema,
+            EMANorm = ema / (close + 1e-6),
+
+            // HMA-normalized metrics (trend-relative)
+            HmaSlope = hmaSlope,
+            HmaSlopeNorm = hmaSlope / (weightedCloseCache[idxLast] + 1e-6),
+            DeltaOverRange = deltaOverRange,
+            DeltaOverRangeNorm = deltaOverRange / (weightedCloseCache[idxLast] + 1e-6),
+
+            // Additional metrics
+            Momentum = momentum,
+            MomentumNorm = momentum / (close + 1e-6),
+            MomentumNow = momentumNow,
+            MomentumStart = momentumStart,
+            MomentumPrev = momentumPrev,
+            MomentumDelta = momentumDelta,
+            MomentumSlope = momentumSlope,
+            PrevMomentumNorm = prevMomentumNorm,
+            HighWickRatio = highWickRatio,
+            WickImbalanceRatio = wickImbalanceRatio,
+            WickImbalanceRatioNorm = wickImbalanceRatio / (close + 1e-6),
+            WickCountLast5 = wickCountLast5,
+            AvgBodyLast5 = avgBodyLast5,
+            TotalWickImbalance = totalWickImbalance,
+            HasBodyRatioSpike = false, // Removed as requested
+            IsEngulfingShape = 0, // Set to 0 (no spike detection)
+            IsReversalSignal = 0, // Set to 0 (no spike detection)
+
+            // Heikin Ashi
+            OpenHA = open_ha,
+            HighHA = high_ha,
+            LowHA = low_ha,
+            CloseHA = close_ha,
+            HaClose = haClose,
+            HaOpen = haOpen,
+            HaHigh = haHigh,
+            HaLow = haLow,
+            HeikinAshiDelta = heikinAshiDelta,
+            HeikinAshiDeltaNorm = heikinAshiDelta / currentAtr,
+            Open = open,
+            High = high,
+            Low = low,
+            Close = close,
+            TickVolume = volume
+        });
+        }
+    }
+    return results;
+}
+
+
+
+public void Update(double rsi, double macd, double signal, double price, double high, double low, double currentHma, double range)
+{
+    // Null/NaN/extreme guards
+    if (double.IsNaN(rsi) || double.IsNaN(macd) || double.IsNaN(signal) || double.IsNaN(price) ||
+        double.IsNaN(high) || double.IsNaN(low) || double.IsNaN(currentHma) || double.IsNaN(range))
+        return;
+    if (Math.Abs(rsi) > 1e6 || Math.Abs(macd) > 1e6 || Math.Abs(signal) > 1e6 || Math.Abs(price) > 1e6 ||
+        Math.Abs(high) > 1e6 || Math.Abs(low) > 1e6 || Math.Abs(currentHma) > 1e6 || Math.Abs(range) > 1e6)
+        return;
+
+    PushCache(rsiCache, rsi);
+    if (rsiCache.Count > cacheSize) rsiCache.RemoveAt(0);
+    PushCache(macdCache, macd);
+    if (macdCache.Count > cacheSize) macdCache.RemoveAt(0);
+    PushCache(signalCache, signal);
+    if (signalCache.Count > cacheSize) signalCache.RemoveAt(0);
+    PushCache(priceCache, price);
+    if (priceCache.Count > cacheSize) priceCache.RemoveAt(0);
+    double weightedClose = (high + low + 2 * price) / 4;
+    double medianPrice = (high + low) / 2;
+    PushCache(weightedCloseCache, weightedClose);
+    if (weightedCloseCache.Count > cacheSize) weightedCloseCache.RemoveAt(0);
+
+    if (rsiCache == null || macdCache == null || signalCache == null || priceCache == null || weightedCloseCache == null)
+        return;
+    if (rsiCache.Count < 3) return;
+
+    int lb = Math.Min(5, rsiCache.Count - 1);
+    if (rsiCache == null || macdCache == null || signalCache == null) return;
+    if (rsiCache.Count <= lb || macdCache.Count <= lb || signalCache.Count <= lb) return;
+
+    var rsiArr = rsiCache;
+    var macdArr = macdCache;
+    var sigArr = signalCache;
+    var priceArr = priceCache;
+    var wcloseArr = weightedCloseCache;
+
+    int idxLast = rsiArr.Count - 1;
+    int idxSecondLast = rsiArr.Count - 2;
+    int idxLbBack = rsiArr.Count - lb;
+    int idxLbBackMinus1 = rsiArr.Count - lb - 1;
+
+    // Basic slope and delta calculations
+    RsiDelta = rsiArr[idxLast] - rsiArr[idxLbBack];
+    MacdDelta = macdArr[idxLast] - macdArr[idxLbBack];
+    RsiSlope = Math.Atan2(RsiDelta, lb);
+    MacdSlope = Math.Atan2(MacdDelta, lb);
+    RsiSlopeDeg = RsiSlope * (180.0 / Math.PI);
+    MacdSlopeDeg = MacdSlope * (180.0 / Math.PI);
+
+    SlopeDiff = Math.Abs(RsiSlope - MacdSlope);
+    RsiMacdSlopeDiff = RsiSlope - MacdSlope;
+
+    // Acceleration calculations
+    if (idxSecondLast >= 0 && idxLbBackMinus1 >= 0)
+    {
+        double prevRsiSlope = Math.Atan2(rsiArr[idxSecondLast] - rsiArr[idxLbBackMinus1], lb);
+        double prevMacdSlope = Math.Atan2(macdArr[idxSecondLast] - macdArr[idxLbBackMinus1], lb);
+        RsiAcceleration = RsiSlope - prevRsiSlope;
+        MacdAcceleration = MacdSlope - prevMacdSlope;
+    }
+    else
+    {
+        RsiAcceleration = 0;
+        MacdAcceleration = 0;
+    }
+
+    // RSI-MACD spread calculations
+    RsiMACDSpread = rsiArr[idxLast] - macdArr[idxLast];
+    RsiMACDSpreadDelta = RsiMACDSpread - (rsiArr[idxLbBack] - macdArr[idxLbBack]);
+
+    // Cross detection logic
+    if (rsiArr.Length >= 2 && macdArr.Length >= 2)
+    {
+        double prevSpread = rsiArr[idxLast - 1] - macdArr[idxLast - 1];
+        double currSpread = rsiArr[idxLast] - macdArr[idxLast];
+        RsiMacdCross = (prevSpread * currSpread) < 0;
+        RsiCrossesAboveMacd = (prevSpread < 0 && currSpread > 0);
+        RsiCrossesBelowMacd = (prevSpread > 0 && currSpread < 0);
+    }
+    else
+    {
+        RsiMacdCross = false;
+        RsiCrossesAboveMacd = false;
+        RsiCrossesBelowMacd = false;
+    }
+
+    // Average RSI-MACD distance calculation
+    double sumDist = 0;
+    for (int i = 0; i < lb; i++)
+    {
+        int ri = rsiArr.Length - 1 - i;
+        if (ri >= 0)
+            sumDist += Math.Abs(rsiArr[ri] - macdArr[ri]);
+    }
+    AvgRSIMACDDistance = lb > 0 ? sumDist / lb : 0;
+    DeltaRSIMACDDistance = Math.Abs(rsiArr[idxLast] - macdArr[idxLast]) - Math.Abs(rsiArr[idxLbBack] - macdArr[idxLbBack]);
+
+    // MACD-Signal spread calculations
+    MacdLineSpread = macdArr[idxLast] - sigArr[idxLast];
+    double prevMacdSpread = macdArr[idxLbBack] - sigArr[idxLbBack];
+    MacdSpreadAcceleration = MacdLineSpread - prevMacdSpread;
+    MacdSignalSlope = Math.Atan2(MacdLineSpread, lb);
+    MacdSignalSlopeDeg = MacdSignalSlope * (180.0 / Math.PI);
+
+    // Histogram calculations
+    double[] hist = macdArr.Zip(sigArr, (m, s) => m - s).ToArray();
+    if (hist != null && hist.Length > lb)
+    {
+        HistDelta = hist[idxLast] - hist[idxLbBack];
+        HistSlope = Math.Atan2(HistDelta, lb);
+        HistSlopeDeg = HistSlope * (180.0 / Math.PI);
+
+        // Calculate histogram strength as average absolute value over lookback period
+        double histSum = 0;
+        for (int i = 0; i < lb && (idxLast - i) >= 0; i++)
+        {
+            histSum += Math.Abs(hist[idxLast - i]);
+        }
+        HistStrength = lb > 0 ? histSum / lb : 0;
+
+        // Histogram acceleration
+        if (idxSecondLast >= 0 && idxLbBackMinus1 >= 0)
+        {
+            double prevHistDelta = hist[idxSecondLast] - hist[idxLbBackMinus1];
+            HistAcceleration = HistDelta - prevHistDelta;
+        }
+        else
+        {
+            HistAcceleration = 0;
+        }
+
+        // Histogram divergence detection
+        HistogramDivergence = Math.Sign(HistDelta) != Math.Sign(RsiDelta);
+    }
+    else
+    {
+        HistDelta = 0;
+        HistSlope = 0;
+        HistSlopeDeg = 0;
+        HistStrength = 0;
+        HistAcceleration = 0;
+        HistogramDivergence = false;
+    }
+
+    // Weighted Close metrics
+    if (weightedCloseCache.Count >= lb + 2 && wcloseArr.Length > idxLbBack)
+    {
+        WCloseMinusHMA = weightedClose - currentHma;
+        WCloseMedianSpread = weightedClose - medianPrice;
+
+        // HMA-based normalization for trend-relative metrics
+        if (Math.Abs(currentHma) > 1e-6)
+            WCloseDistNorm = WCloseMinusHMA / currentHma;
+        else
+            WCloseDistNorm = 0;
+    }
+    else
+    {
+        WCloseMinusHMA = 0;
+        WCloseMedianSpread = 0;
+        WCloseDistNorm = 0;
+    }
+}
+    private Bars Bars;
+    private int cacheSize;
+    public List<double> rsiCache;
+    public List<double> macdCache;
+    public List<double> signalCache;
+    public List<double> priceCache;
+    public List<double> weightedCloseCache;
+
+    public IndicatorAnalyzer(int cacheSize = 64, Bars bars = null, List<double> rsiCache = null, List<double> macdCache = null, List<double> signalCache = null, List<double> priceCache = null, List<double> weightedCloseCache = null)
+    {
+        this.cacheSize = cacheSize;
+        this.Bars = bars;
+        this.rsiCache = rsiCache ?? new List<double>();
+        this.macdCache = macdCache ?? new List<double>();
+        this.signalCache = signalCache ?? new List<double>();
+        this.priceCache = priceCache ?? new List<double>();
+        this.weightedCloseCache = weightedCloseCache ?? new List<double>();
+    }
+
+    public void SetCaches(List<double> rsiCache, List<double> macdCache, List<double> signalCache, List<double> priceCache, List<double> weightedCloseCache)
+    {
+        this.rsiCache = rsiCache;
+        this.macdCache = macdCache;
+        this.signalCache = signalCache;
+        this.priceCache = priceCache;
+        this.weightedCloseCache = weightedCloseCache;
+    }
+
+    private void PushCache<T>(List<T> cache, T value)
+    {
+        cache.Add(value);
+        if (cache.Count > cacheSize)
+            cache.RemoveAt(0);
+    }
+
+
+    public void Dispose()
+    {
+        rsiCache?.Clear();
+        macdCache?.Clear();
+        signalCache?.Clear();
+        priceCache?.Clear();
+        weightedCloseCache?.Clear();
+    }
+} // Затваряне на IndicatorAnalyzer класа
+
+
+
+
+// Enhanced version with integrated delta/price divergence logic
+
+namespace cAlgo.Indicators
+{
+    [Indicator(IsOverlay = true, AccessRights = AccessRights.FullAccess)]
+    public class TrendCoreIndicator : Indicator, IDisposable
+    {
+        // Път до лог файла (може да се промени по желание)
+        private string logFilePath = @"C:\\Users\\Az\\Documents\\MyCTraderLogs\\slopebot_log.csv";
+
+        public override void Calculate(int index)
+        {
+            if (index < 50 || Bars?.ClosePrices == null || _rsi?.Result == null || _macdCustom?.Macd == null || _hma?.Result == null) return;
+            if (index >= Bars.ClosePrices.Count || index >= _rsi.Result.Count || index >= _macdCustom.Macd.Count || index >= _hma.Result.Count) return;
+
+            UpdateCaches(index);
+            UpdateAnalyzer(index);
+            UpdateWickTracking(index);
+
+            if (index % 10 == 0)
+            {
+                LogCurrentData(index);
+            }
+
+            HmaLine[index] = _hma.Result[index];
+        }
+
+
+
+        private void UpdateCaches(int index)
+        {
+            if (_rsi?.Result == null || _macdCustom?.Macd == null || _macdCustom?.Signal == null || Bars?.ClosePrices == null || _hma?.Result == null) return;
+            if (index >= _rsi.Result.Count || index >= _macdCustom.Macd.Count || index >= Bars.ClosePrices.Count) return;
+
+            _rsiCache[_cacheIndex] = _rsi.Result[index];
+            _macdCache[_cacheIndex] = _macdCustom.Macd[index];
+            _signalCache[_cacheIndex] = _macdCustom.Signal[index];
+            _priceCache[_cacheIndex] = Bars.ClosePrices[index];
+            _closeCache[_cacheIndex] = Bars.ClosePrices[index];
+            _highCache[_cacheIndex] = Bars.HighPrices[index];
+            _lowCache[_cacheIndex] = Bars.LowPrices[index];
+            _hmaCache[_cacheIndex] = _hma.Result[index];
+            _weightedCloseCache[_cacheIndex] = (Bars.HighPrices[index] + Bars.LowPrices[index] + 2 * Bars.ClosePrices[index]) / 4;
+
+            _cacheIndex = (_cacheIndex + 1) % cacheSize;
+            if (_cacheCount < cacheSize) _cacheCount++;
+        }
+
+        private void UpdateAnalyzer(int index)
+        {
+            if (_analyzer == null || Bars == null || _rsi?.Result == null || _macdCustom?.Macd == null || _macdCustom?.Signal == null || _hma?.Result == null ||
+                index >= _rsi.Result.Count || index >= _macdCustom.Macd.Count || index >= Bars.ClosePrices.Count) return;
+
+            var rsiList = new List<double>();
+            var macdList = new List<double>();
+            var signalList = new List<double>();
+            var priceList = new List<double>();
+            var weightedCloseList = new List<double>();
+
+            for (int i = 0; i < _cacheCount; i++)
+            {
+                int idx = (_cacheIndex - _cacheCount + i + cacheSize) % cacheSize;
+                rsiList.Add(_rsiCache[idx]);
+                macdList.Add(_macdCache[idx]);
+                signalList.Add(_signalCache[idx]);
+                priceList.Add(_priceCache[idx]);
+                weightedCloseList.Add(_weightedCloseCache[idx]);
+            }
+
+            _analyzer.SetCaches(rsiList, macdList, signalList, priceList, weightedCloseList);
+            _analyzer.Update(_rsi.Result[index], _macdCustom.Macd[index], _macdCustom.Signal[index],
+                Bars.ClosePrices[index], Bars.HighPrices[index], Bars.LowPrices[index],
+                _hma.Result[index], Bars.HighPrices[index] - Bars.LowPrices[index]);
+        }
+
+        private void UpdateWickTracking(int index)
+        {
+            if (Bars?.HighPrices == null || Bars.LowPrices == null || Bars.ClosePrices == null || Bars.OpenPrices == null) return;
+            if (index >= Bars.HighPrices.Count || index >= Bars.LowPrices.Count || index >= Bars.ClosePrices.Count || index >= Bars.OpenPrices.Count) return;
+
+            double range = Bars.HighPrices[index] - Bars.LowPrices[index];
+            if (range > 0)
+            {
+                double upperWick = Bars.HighPrices[index] - Math.Max(Bars.ClosePrices[index], Bars.OpenPrices[index]);
+                double lowerWick = Math.Min(Bars.ClosePrices[index], Bars.OpenPrices[index]) - Bars.LowPrices[index];
+                double upperWickRatio = upperWick / range;
+                double lowerWickRatio = lowerWick / range;
+                if (upperWickRatio > 0.6) upperWickImbalanceCount++;
+                if (lowerWickRatio > 0.6) lowerWickImbalanceCount++;
+            }
+            if (index % 1000 == 0) { upperWickImbalanceCount = 0; lowerWickImbalanceCount = 0; }
+        }
+
+        private void LogCurrentData(int index)
+        {
+            if (Bars?.OpenTimes == null || Bars.OpenPrices == null || Bars.ClosePrices == null || Bars.TickVolumes == null || _analyzer == null) return;
+            if (index >= Bars.OpenTimes.Count || index >= Bars.OpenPrices.Count || index >= Bars.ClosePrices.Count || index >= Bars.TickVolumes.Count) return;
+            var lookbacks = _analyzer.AnalyzeLookbacks(null, index);
+            var logData = new List<string>();
+
+            logData.Add(index.ToString());
+            logData.Add(Bars.OpenTimes[index].Ticks.ToString());
+            logData.Add(Bars.OpenPrices[index].ToString());
+            logData.Add(Bars.HighPrices[index].ToString());
+            logData.Add(Bars.LowPrices[index].ToString());
+            logData.Add(Bars.ClosePrices[index].ToString());
+            logData.Add(Bars.TickVolumes[index].ToString());
+            logData.Add((Bars.HighPrices[index] - Bars.LowPrices[index]).ToString());
+            logData.Add((Symbol?.TickSize ?? 0.0001).ToString());
+            logData.Add((_atr?.Result[index] ?? 0).ToString());
+
+            logData.Add(_analyzer.RsiSlope.ToString());
+            logData.Add(_analyzer.MacdSlope.ToString());
+            logData.Add(_analyzer.RsiMACDSpread.ToString());
+            logData.Add(_analyzer.RsiAcceleration.ToString());
+            logData.Add(_analyzer.MacdAcceleration.ToString());
+            logData.Add(_analyzer.HistSlope.ToString());
+            logData.Add(_analyzer.WCloseMinusHMA.ToString());
+
+            if (lookbacks.Count > 0)
+            {
+                var lb = lookbacks[0];
+                logData.Add(lb.BodyRatio.ToString());
+                logData.Add(lb.ZScoreRSI.ToString());
+                logData.Add(lb.HmaAngle.ToString());
+                logData.Add(lb.Momentum.ToString());
+                logData.Add(lb.CompositeScore.ToString());
+            }
+
+            logData.Add(upperWickImbalanceCount.ToString());
+            logData.Add(lowerWickImbalanceCount.ToString());
+            logData.Add(_barCounter.ToString());
+            logData.Add(cacheSize.ToString());
+
+            string logLine = string.Join(",", logData);
+            lock (_logLock)
+            {
+                _logBuffer.AppendLine(logLine);
+            }
+
+            _barCounter++;
+            if (_barCounter % 100 == 0)
+            {
+                string bufferContent;
+                lock (_logLock)
+                {
+                    bufferContent = _logBuffer.ToString();
+                    _logBuffer.Clear();
+                }
+                Task.Run(async () => {
+                    await _fileSemaphore.WaitAsync();
+                    try
+                    {
+                        await File.AppendAllTextAsync(logFilePath, bufferContent);
+                    }
+                    catch (Exception ex) { Print($"Error: {ex.Message}"); }
+                    finally
+                    {
+                        _fileSemaphore.Release();
+                    }
+                });
+            }
+        }
+
+
+        private void LogBarMetrics(int index)
+        {
+            var lookbacks = _analyzer.AnalyzeLookbacks(null, index);
+            var logData = new List<string>();
+
+            // Bar данни
+            logData.Add(index.ToString());
+            logData.Add(Bars.OpenTimes[index].ToString());
+            logData.Add(Bars.OpenPrices[index].ToString());
+            logData.Add(Bars.HighPrices[index].ToString());
+            logData.Add(Bars.LowPrices[index].ToString());
+            logData.Add(Bars.ClosePrices[index].ToString());
+            logData.Add(Bars.TickVolumes[index].ToString());
+
+            // Analyzer метрики
+            logData.Add(_analyzer.RsiSlope.ToString());
+            logData.Add(_analyzer.MacdSlope.ToString());
+            logData.Add(_analyzer.RsiMACDSpread.ToString());
+            logData.Add(_analyzer.RsiAcceleration.ToString());
+            logData.Add(_analyzer.MacdAcceleration.ToString());
+            logData.Add(_analyzer.HistSlope.ToString());
+            logData.Add(_analyzer.WCloseMinusHMA.ToString());
+
+            // Lookback метрики
+            if (lookbacks.Count > 0)
+            {
+                var lb = lookbacks[0];
+                logData.Add(lb.BodyRatio.ToString());
+                logData.Add(lb.ZScoreRSI.ToString());
+                logData.Add(lb.HmaAngle.ToString());
+                logData.Add(lb.Momentum.ToString());
+                logData.Add(lb.CompositeScore.ToString());
+            }
+
+            string logLine = string.Join(",", logData);
+            lock (_logLock)
+            {
+                _logBuffer.AppendLine(logLine);
+            }
+        }
+
+        private double GetVolumePriceRatio(int index)
+        {
+            double volume = Bars.TickVolumes[index];
+            double range = Bars.HighPrices[index] - Bars.LowPrices[index];
+            return range != 0 ? volume / range : 0;
+        }
+
+        private IndicatorAnalyzer _analyzer;
+        private int cacheSize = 64;
+        private double[] _rsiCache = new double[64];
+        private double[] _macdCache = new double[64];
+        private double[] _signalCache = new double[64];
+        private double[] _priceCache = new double[64];
+        private double[] _weightedCloseCache = new double[64];
+        private double[] _closeCache = new double[64];
+        private double[] _highCache = new double[64];
+        private double[] _lowCache = new double[64];
+        private double[] _hmaCache = new double[64];
+        private int _cacheIndex = 0;
+        private int _cacheCount = 0;
+        private StringBuilder _logBuffer = new StringBuilder();
+        private readonly object _logLock = new object();
+        private readonly SemaphoreSlim _fileSemaphore = new SemaphoreSlim(1, 1);
+        private bool _disposed = false;
+        private int _barCounter = 0;
+        private int upperWickImbalanceCount = 0;
+        private int lowerWickImbalanceCount = 0;
+
+        // === Parameters ===
+        [Parameter("HMA Period", DefaultValue = 26)] public int HmaPeriod { get; set; }
+        [Parameter("Slope Lookback", DefaultValue = 5)] public int SlopeLookback { get; set; }
+        [Parameter("Min Candle Body Size (pips)", DefaultValue = 5)] public double MinBodyPips { get; set; }
+        [Parameter("Min Slope (pips)", DefaultValue = 3)] public double MinSlopePips { get; set; }
+        [Parameter("Min Distance from HMA (pips)", DefaultValue = 5)] public double MinHmaDistancePips { get; set; }
+        [Parameter("Body to Range Ratio", DefaultValue = 0.6)] public double MinBodyRatio { get; set; }
+        [Parameter("Max Wick Ratio", DefaultValue = 0.4)] public double MaxWickRatio { get; set; }
+        [Parameter("Min Movement Last N Bars", DefaultValue = 10)] public int MovementLookback { get; set; }
+        [Parameter("Min Price Change (pips)", DefaultValue = 10)] public double MinPriceChangePips { get; set; }
+        [Parameter("Min Consolidation Bars", DefaultValue = 3)] public int ConsolidationBars { get; set; }
+        [Parameter("Max Consolidation Range (pips)", DefaultValue = 5)] public double MaxConsolidationRangePips { get; set; }
+        [Parameter("Min HMA Angle (deg)", DefaultValue = 15)] public double MinHmaAngleDeg { get; set; }
+        [Parameter("Min Momentum Accel (pips)", DefaultValue = 3)] public double MinMomentumAccel { get; set; }
+        [Parameter("Min Price Angle (deg)", DefaultValue = 20)] public double MinPriceAngleDeg { get; set; }
+        [Parameter("Minimum Score (0-100)", DefaultValue = 70)] public int MinScoreThreshold { get; set; }
+
+        [Output("HMA", LineColor = "DodgerBlue")] public IndicatorDataSeries HmaLine { get; set; }
+
+        private IndicatorDataSeries _wmaHalfSeries;
+        private IndicatorDataSeries _wmaFullSeries;
+        private IndicatorDataSeries _hmaRawSeries;
+        private RelativeStrengthIndex _rsi;
+        private AverageTrueRange _atr;
+        private MACDcustom _macdCustom;
+        private HullMovingAverage _hma;
+        // премахнато: private string _logFilePath; // не е нужно като поле, логиката е на регион
+        private int _markStartIndex = -1;
+        private int _zoneCounter = 0;
+        private string GetNewLogFilePath()
+        {
+            _zoneCounter++;
+            string dir = System.IO.Path.GetDirectoryName(logFilePath);
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(logFilePath);
+            string ext = System.IO.Path.GetExtension(logFilePath);
+            string newName = $"{baseName}_zone{_zoneCounter}{ext}";
+            return System.IO.Path.Combine(dir, newName);
+        }
+
+        // === Additional Logic for Spike Detection, Wick Imbalance Heatmap, and Volume/Price Ratio ===
+
+
+        protected override void Initialize()
+        {
+            Print("TEST Initialize");
+            _wmaHalfSeries = CreateDataSeries();
+            _wmaFullSeries = CreateDataSeries();
+            _hmaRawSeries = CreateDataSeries();
+
+            _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, 14);
+            _atr = Indicators.AverageTrueRange(14, MovingAverageType.Exponential);
+            _macdCustom = Indicators.GetIndicator<MACDcustom>();
+            _hma = Indicators.HullMovingAverage(Bars.ClosePrices, HmaPeriod);
+
+            var rsiList = new List<double>();
+            var macdList = new List<double>();
+            var signalList = new List<double>();
+            var priceList = new List<double>();
+            var weightedCloseList = new List<double>();
+            _analyzer = new IndicatorAnalyzer(64, this.Bars, rsiList, macdList, signalList, priceList, weightedCloseList);
+
+
+            // Логика за маркиране с клик и запис на зона
+            Chart.MouseDown += (ChartMouseEventArgs args) =>
+            {
+                int index = (int)args.BarIndex;
+                bool hasStart = false, hasEnd = false;
+                foreach (var obj in Chart.Objects)
+                {
+                    if (obj.Name == $"Start_{index}") hasStart = true;
+                    if (obj.Name == $"End_{index}") hasEnd = true;
+                }
+                if (hasStart || hasEnd)
+                {
+                    Chart.RemoveObject($"Start_{index}");
+                    Chart.RemoveObject($"End_{index}");
+                    _markStartIndex = -1;
+                    return;
+                }
+                if (_markStartIndex == -1)
+                {
+                    _markStartIndex = index;
+                    Chart.DrawVerticalLine($"Start_{index}", Bars.OpenTimes[index], Color.Orange, 1, LineStyle.Solid);
+                }
+                else
+                {
+                    // Zone marked: log to a new file
+                    int start = _markStartIndex;
+                    int end = index;
+                    string newLogFile = GetNewLogFilePath();
+                    LogSpikeRegionWithCustomFile_FIXED(start, end, newLogFile);
+                    _markStartIndex = -1;
+                }
+            }; // end Chart.MouseDown
+        }
+
+        protected override void OnStop()
+        {
+            string bufferContent;
+            lock (_logLock)
+            {
+                if (_logBuffer.Length == 0) return;
+                bufferContent = _logBuffer.ToString();
+                _logBuffer.Clear();
+            }
+            Task.Run(async () => {
+                await _fileSemaphore.WaitAsync();
+                try
+                {
+                    await File.AppendAllTextAsync(logFilePath, bufferContent);
+                }
+                catch (Exception ex) { Print($"Error: {ex.Message}"); }
+                finally
+                {
+                    _fileSemaphore.Release();
+                }
+            });
+        }
+
+private void LogSpikeRegionWithCustomFile_FIXED(int startIndex, int endIndex, string customLogFilePath)
+{
+    int[] lookbacks = new int[] { 1, 2, 3, 5, 8, 12, 14, 20, 30, 40, 50, 60 };
+    var lookbackFields = typeof(LookbackEntry).GetFields();
+    var lookbackMetricsList = new List<IndicatorAnalyzer.LookbackMetrics>();
+    
+    int from = Math.Min(startIndex, endIndex);
+    int to = Math.Max(startIndex, endIndex);
+    
+    // Generate metrics for each bar in zone
+    for (int bar = from; bar <= to; bar++)
+    {
+        var metrics = _analyzer.AnalyzeLookbacks(lookbacks, bar);
+        lookbackMetricsList.AddRange(metrics);
+    }
+
+    // Extract zones from cache arrays for global metrics
+    int zoneLength = to - from + 1;
+    double[] rsiZone = new double[zoneLength];
+    double[] macdZone = new double[zoneLength];
+    double[] signalZone = new double[zoneLength];
+    double[] closeZone = new double[zoneLength];
+    double[] highZone = new double[zoneLength];
+    double[] lowZone = new double[zoneLength];
+    double[] hmaZone = new double[zoneLength];
+    
+    for (int i = 0; i < zoneLength; i++)
+    {
+        int cacheIdx = (from + i) % cacheSize;
+        rsiZone[i] = _rsiCache[cacheIdx];
+        macdZone[i] = _macdCache[cacheIdx];
+        signalZone[i] = _signalCache[cacheIdx];
+        closeZone[i] = _closeCache[cacheIdx];
+        highZone[i] = _highCache[cacheIdx];
+        lowZone[i] = _lowCache[cacheIdx];
+        hmaZone[i] = _hmaCache[cacheIdx];
+    }
+    
+    var histZone = macdZone.Zip(signalZone, (m, s) => m - s).ToArray();
+    var rsiMacdDistZone = rsiZone.Zip(macdZone, (r, m) => Math.Abs(r - m)).ToArray();
+
+    // Helper functions
+    double SafeAvg(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Average() : 0; }
+    double SafeMax(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Max() : 0; }
+    double SafeMin(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Min() : 0; }
+
+    // Calculate ATR for the zone
+    double avgClose = SafeAvg(closeZone);
+    double avgHigh = SafeAvg(highZone);
+    double avgLow = SafeAvg(lowZone);
+    double avgRange = avgHigh - avgLow;
+    double currentAtr = avgRange > 0 ? avgRange : 0.0001;
+
+    // Calculate 14-period ATR if enough data
+    if (closeZone.Length >= 14)
+    {
+        double[] atrValues = new double[closeZone.Length - 1];
+        for (int i = 1; i < closeZone.Length; i++)
+        {
+            double high = highZone[i];
+            double low = lowZone[i];
+            double prevClose = closeZone[i - 1];
+            atrValues[i - 1] = Math.Max(high - low, Math.Max(Math.Abs(high - prevClose), Math.Abs(low - prevClose)));
+        }
+        currentAtr = atrValues.Take(14).Average();
+    }
+
+    // Body calculations
+    double[] bodyArr = new double[closeZone.Length - 1];
+    for (int i = 1; i < closeZone.Length; i++)
+    {
+        bodyArr[i - 1] = Math.Abs(closeZone[i] - closeZone[i - 1]);
+    }
+    double avgBody = SafeAvg(bodyArr);
+
+    // Volume calculations
+    double avgVolume = 0;
+    if (Bars != null && Bars.TickVolumes.Count > to)
+    {
+        avgVolume = SafeAvg(Bars.TickVolumes.Skip(from).Take(to - from + 1));
+    }
+
+    // Z-Score calculations
+    double zScoreRSI = 0, zScoreVolume = 0;
+    if (rsiZone.Length > 1)
+    {
+        double rsiMean = SafeAvg(rsiZone);
+        double rsiStd = Math.Sqrt(rsiZone.Select(x => Math.Pow(x - rsiMean, 2)).Average());
+        if (rsiStd > 0)
+            zScoreRSI = (rsiZone.Last() - rsiMean) / rsiStd;
+    }
+
+    if (Bars != null && Bars.TickVolumes.Count > to && to - from + 1 > 1)
+    {
+        var volumeZone = Bars.TickVolumes.Skip(from).Take(to - from + 1).ToArray();
+        double volMean = SafeAvg(volumeZone);
+        double volStd = Math.Sqrt(volumeZone.Select(x => Math.Pow(x - volMean, 2)).Average());
+        if (volStd > 0)
+            zScoreVolume = (volumeZone.Last() - volMean) / volStd;
+    }
+
+    // Wick calculations
+    double upperWick = avgHigh - avgClose;
+    double lowerWick = avgClose - avgLow;
+    double upperWickRatio = avgRange > 0 ? upperWick / avgRange : 0;
+    double lowerWickRatio = avgRange > 0 ? lowerWick / avgRange : 0;
+    double symmetry = Math.Abs(upperWickRatio - lowerWickRatio);
+
+    // Ratios and normalized values
+    double avgBodyRatio = avgRange > 0 ? avgBody / avgRange : 0;
+    double avgVolumePriceRatio = avgRange > 0 ? avgVolume / avgRange : 0;
+
+    // Delta and momentum calculations
+    double priceDelta = closeZone.Length > 1 ? closeZone.Last() - closeZone.First() : 0;
+    double delta = priceDelta;
+    double deltaOverRange = avgRange > 0 ? delta / avgRange : 0;
+    double deltaPriceRatio = Math.Abs(priceDelta) > 1e-6 ? delta / priceDelta : 0;
+    double momentum = priceDelta;
+    double momentumRatio = Math.Abs(priceDelta) > 1e-6 ? momentum / priceDelta : 0;
+
+    // Momentum acceleration and shift
+    double momentumAccel = 0, momentumShift = 0;
+    if (closeZone.Length > 3)
+    {
+        double mNow = closeZone[^1] - closeZone[^2];
+        double mPrev = closeZone[^2] - closeZone[^3];
+        momentumShift = mNow - mPrev;
+        if (closeZone.Length > 4)
+        {
+            double mPrev2 = closeZone[^3] - closeZone[^4];
+            momentumAccel = (mNow - mPrev) - (mPrev - mPrev2);
+        }
+    }
+
+    // HMA calculations
+    double hmaSlope = hmaZone.Length > 1 ? hmaZone.Last() - hmaZone.First() : 0;
+    double hmaAngle = Math.Atan2(hmaSlope, hmaZone.Length > 1 ? hmaZone.Length - 1 : 1) * (180.0 / Math.PI);
+    double hmaCloseDistance = hmaZone.Length > 0 && closeZone.Length > 0 ? Math.Abs(hmaZone.Last() - closeZone.Last()) : 0;
+
+    // Price angle
+    double priceAngle = Math.Atan2(priceDelta, closeZone.Length > 1 ? closeZone.Length - 1 : 1) * (180.0 / Math.PI);
+
+    // EMA calculation (21-period)
+    double ema = avgClose;
+    if (closeZone.Length >= 21)
+    {
+        double multiplier = 2.0 / (21 + 1);
+        ema = closeZone[0];
+        for (int i = 1; i < Math.Min(21, closeZone.Length); i++)
+        {
+            ema = (closeZone[i] * multiplier) + (ema * (1 - multiplier));
+        }
+    }
+    double emaDistance = Math.Abs(avgClose - ema);
+
+    // Weighted close calculations
+    double wCloseMinusHMA = 0, wCloseDistNorm = 0, wCloseMedianSpread = 0;
+    if (highZone.Length > 0 && lowZone.Length > 0 && closeZone.Length > 0 && hmaZone.Length > 0)
+    {
+        double weightedClose = (avgHigh + avgLow + 2 * avgClose) / 4;
+        wCloseMinusHMA = weightedClose - hmaZone.Last();
+        wCloseMedianSpread = weightedClose - ((avgHigh + avgLow) / 2);
+        wCloseDistNorm = Math.Abs(hmaZone.Last()) > 1e-6 ? wCloseMinusHMA / hmaZone.Last() : 0;
+    }
+
+    // Composite scores
+    double compositeScore = 0.6 * avgBodyRatio + 0.4 * (1 - symmetry);
+    double microScore = avgBodyRatio + (1 - symmetry);
+
+    // Wick analysis
+    double highWickRatio = (upperWick + lowerWick) / (avgRange + 1e-6);
+    double wickImbalanceRatio = highWickRatio;
+
+    // Wick count analysis
+    int wickCountLast5 = 0;
+    int upperWickImbalanceCount = 0;
+    int lowerWickImbalanceCount = 0;
+    int totalWickImbalance = 0;
+    double avgBodyLast5 = 0;
+
+    if (closeZone.Length >= 5)
+    {
+        for (int i = Math.Max(0, closeZone.Length - 5); i < closeZone.Length - 1; i++)
+        {
+            double barHigh = highZone[i];
+            double barLow = lowZone[i];
+            double barClose = closeZone[i];
+            double barOpen = i > 0 ? closeZone[i - 1] : closeZone[i];
+            double barRange = barHigh - barLow;
+            double barUpperWick = barHigh - Math.Max(barClose, barOpen);
+            double barLowerWick = Math.Min(barClose, barOpen) - barLow;
+
+            if (barRange > 0)
+            {
+                if (barUpperWick / barRange > 0.3)
+                {
+                    wickCountLast5++;
+                    upperWickImbalanceCount++;
+                }
+                if (barLowerWick / barRange > 0.3)
+                {
+                    wickCountLast5++;
+                    lowerWickImbalanceCount++;
+                }
+            }
+        }
+        totalWickImbalance = Math.Abs(upperWickImbalanceCount - lowerWickImbalanceCount);
+        avgBodyLast5 = SafeAvg(bodyArr.Skip(Math.Max(0, bodyArr.Length - 5)));
+    }
+
+    // Body ratio deviations
+    double bodyRatioDev1 = 0, bodyRatioDev5 = 0;
+    if (closeZone.Length >= 5)
+    {
+        double[] bodyRatios = new double[Math.Min(5, closeZone.Length - 1)];
+        for (int i = 0; i < bodyRatios.Length; i++)
+        {
+            int idx = closeZone.Length - 2 - i;
+            double barRange = highZone[idx] - lowZone[idx];
+            bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+        }
+        double avgBodyRatio5 = SafeAvg(bodyRatios);
+        bodyRatioDev1 = avgBodyRatio - avgBodyRatio5;
+    }
+
+    if (closeZone.Length >= 20)
+    {
+        double[] bodyRatios = new double[Math.Min(20, closeZone.Length - 1)];
+        for (int i = 0; i < bodyRatios.Length; i++)
+        {
+            int idx = closeZone.Length - 2 - i;
+            double barRange = highZone[idx] - lowZone[idx];
+            bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+        }
+        double avgBodyRatio20 = SafeAvg(bodyRatios);
+        bodyRatioDev5 = avgBodyRatio - avgBodyRatio20;
+    }
+
+    // Previous bar metrics
+    double prevBody = closeZone.Length > 2 ? Math.Abs(closeZone[^2] - closeZone[^3]) : 0;
+    double prevRange = highZone.Length > 2 && lowZone.Length > 2 ? highZone[^2] - lowZone[^2] : 0;
+    double prevVolume = (Bars != null && Bars.TickVolumes.Count > to - 1) ? Bars.TickVolumes[to - 1] : 0;
+    double prevBodyRatio = prevRange > 0 ? prevBody / prevRange : 0;
+    int prevIsBullish = (closeZone.Length > 2 && closeZone[^2] > closeZone[^3]) ? 1 : 0;
+    double prevMomentumNorm = (closeZone.Length > 3 && Math.Abs(closeZone[^3]) > 1e-6) ? (closeZone[^2] - closeZone[^3]) / closeZone[^3] : 0;
+
+    // Spike potential
+    int spikePotentialIndex = 0;
+    if (bodyArr.Length >= 5)
+        spikePotentialIndex = bodyArr.Skip(bodyArr.Length - 5).Count(b => b > avgBody * 1.5);
+
+    // Heikin Ashi calculations
+    double avgOpen = closeZone.Length > 1 ? closeZone[0] : avgClose;
+    double open_ha = (avgOpen + avgClose) / 2;
+    double high_ha = avgHigh;
+    double low_ha = avgLow;
+    double closePrice = closeZone.Length > 0 ? closeZone.Last() : 0;
+    double haClose = (avgOpen + avgHigh + avgLow + avgClose) / 4;
+    double haOpen = (open_ha + haClose) / 2;
+    double haHigh = Math.Max(Math.Max(high_ha, haOpen), haClose);
+    double haLow = Math.Min(Math.Min(low_ha, haOpen), haClose);
+    double heikinAshiDelta = haClose - haOpen;
+
+    // Build global metrics dictionary (zone aggregated values)
+    var globalMetrics = new Dictionary<string, object>();
+
+    // Zone metadata
+    globalMetrics["ZoneStartIndex"] = from;
+    globalMetrics["ZoneEndIndex"] = to;
+    globalMetrics["ZoneLength"] = zoneLength;
+    globalMetrics["ZoneStartTime"] = Bars != null && Bars.OpenTimes.Count > from ? Bars.OpenTimes[from] : DateTime.Now;
+    globalMetrics["ZoneEndTime"] = Bars != null && Bars.OpenTimes.Count > to ? Bars.OpenTimes[to] : DateTime.Now;
+    globalMetrics["TimeFrame"] = TimeFrame.ToString();
+
+    // Aggregated indicator metrics for zone
+    globalMetrics.Add("avgRsi", SafeAvg(rsiZone));
+    globalMetrics.Add("maxRsi", SafeMax(rsiZone));
+    globalMetrics.Add("minRsi", SafeMin(rsiZone));
+    globalMetrics.Add("avgMacd", SafeAvg(macdZone));
+    globalMetrics.Add("maxMacd", SafeMax(macdZone));
+    globalMetrics.Add("minMacd", SafeMin(macdZone));
+    globalMetrics.Add("macdSpread", SafeMax(macdZone) - SafeMin(macdZone));
+    globalMetrics.Add("macdDelta", macdZone.Length > 1 ? macdZone.Last() - macdZone.First() : 0);
+    globalMetrics.Add("avgSignal", SafeAvg(signalZone));
+    globalMetrics.Add("maxSignal", SafeMax(signalZone));
+    globalMetrics.Add("minSignal", SafeMin(signalZone));
+    globalMetrics.Add("avgHistStrength", SafeAvg(histZone.Select(Math.Abs)));
+    globalMetrics.Add("histogramDelta", histZone.Length > 1 ? histZone.Last() - histZone.First() : 0);
+    globalMetrics.Add("avgRSIMACDDistance", SafeAvg(rsiMacdDistZone));
+
+    // Zone-level aggregated metrics
+    globalMetrics.Add("avgBody", avgBody);
+    globalMetrics.Add("avgRange", avgRange);
+    globalMetrics.Add("avgVolume", avgVolume);
+    globalMetrics.Add("avgBodyRatio", avgBodyRatio);
+    globalMetrics.Add("avgVolumePriceRatio", avgVolumePriceRatio);
+    globalMetrics.Add("zoneATR", currentAtr);
+    globalMetrics.Add("zonePriceDelta", priceDelta);
+    globalMetrics.Add("zoneMomentum", momentum);
+    globalMetrics.Add("zoneHmaSlope", hmaSlope);
+    globalMetrics.Add("zoneHmaAngle", hmaAngle);
+    globalMetrics.Add("zonePriceAngle", priceAngle);
+    globalMetrics.Add("zoneCompositeScore", compositeScore);
+    globalMetrics.Add("zoneMicroScore", microScore);
+    globalMetrics.Add("zoneSymmetry", symmetry);
+    globalMetrics.Add("zoneUpperWickRatio", upperWickRatio);
+    globalMetrics.Add("zoneLowerWickRatio", lowerWickRatio);
+    globalMetrics.Add("zoneWickImbalanceRatio", wickImbalanceRatio);
+    globalMetrics.Add("zoneUpperWickImbalanceCount", upperWickImbalanceCount);
+    globalMetrics.Add("zoneLowerWickImbalanceCount", lowerWickImbalanceCount);
+    globalMetrics.Add("zoneTotalWickImbalance", totalWickImbalance);
+    globalMetrics.Add("zoneBodyRatioDev1", bodyRatioDev1);
+    globalMetrics.Add("zoneBodyRatioDev5", bodyRatioDev5);
+    globalMetrics.Add("zoneSpikePotentialIndex", spikePotentialIndex);
+    globalMetrics.Add("zoneMomentumAccel", momentumAccel);
+    globalMetrics.Add("zoneMomentumShift", momentumShift);
+    globalMetrics.Add("zoneZScoreRSI", zScoreRSI);
+    globalMetrics.Add("zoneZScoreVolume", zScoreVolume);
+    globalMetrics.Add("zoneEmaDistance", emaDistance);
+    globalMetrics.Add("zoneHmaCloseDistance", hmaCloseDistance);
+    globalMetrics.Add("zoneHeikinAshiDelta", heikinAshiDelta);
+
+    // Zone-level analyzer metrics
+    if (_analyzer != null)
+    {
+        globalMetrics.Add("analyzerRsiSlope", _analyzer.RsiSlope);
+        globalMetrics.Add("analyzerMacdSlope", _analyzer.MacdSlope);
+        globalMetrics.Add("analyzerRsiMACDSpread", _analyzer.RsiMACDSpread);
+        globalMetrics.Add("analyzerHistStrength", _analyzer.HistStrength);
+        globalMetrics.Add("analyzerRsiAcceleration", _analyzer.RsiAcceleration);
+        globalMetrics.Add("analyzerMacdAcceleration", _analyzer.MacdAcceleration);
+        globalMetrics.Add("analyzerHistogramDivergence", _analyzer.HistogramDivergence ? 1 : 0);
+        globalMetrics.Add("analyzerRsiMacdCross", _analyzer.RsiMacdCross);
+        globalMetrics.Add("analyzerRsiCrossesAboveMacd", _analyzer.RsiCrossesAboveMacd);
+        globalMetrics.Add("analyzerRsiCrossesBelowMacd", _analyzer.RsiCrossesBelowMacd);
+    }
+
+    // Compose header
+    var globalKeys = globalMetrics.Keys.ToList();
+    var header = string.Join(",", lookbackFields.Select(f => f.Name)) + ",IsGlobal," + string.Join(",", globalKeys) + "\n";
+    File.WriteAllText(customLogFilePath, header);
+
+    // Write LookbackEntry rows (per-candle raw values)
+    foreach (var metrics in lookbackMetricsList)
+    {
+        var lookbackEntry = new LookbackEntry();
+
+        // Raw per-candle values from AnalyzeLookbacks
+        lookbackEntry.BarIndex = metrics.BarIndex;
+        lookbackEntry.Time = metrics.Time;
+        lookbackEntry.TimeFrame = metrics.TimeFrame;
+        lookbackEntry.Lookback = metrics.Lookback;
+        lookbackEntry.RSIMacdDistance = metrics.RSIMacdDistance;
+        lookbackEntry.RSISignalDistance = metrics.RSISignalDistance;
+        lookbackEntry.RSIHistogramDistance = metrics.RSIHistogramDistance;
+        lookbackEntry.RSIMacdSlopeDeg = metrics.RSIMacdSlopeDeg;
+        lookbackEntry.RSIMacdDelta = metrics.RSIMacdDelta;
+        lookbackEntry.RSISignalSlopeDeg = metrics.RSISignalSlopeDeg;
+        lookbackEntry.RSISignalDelta = metrics.RSISignalDelta;
+        lookbackEntry.HistogramDelta = metrics.HistogramDelta;
+        lookbackEntry.RSIAboveMACD = metrics.RSIAboveMACD;
+        lookbackEntry.RSIAboveSignal = metrics.RSIAboveSignal;
+        lookbackEntry.RSIAboveHistogram = metrics.RSIAboveHistogram;
+        lookbackEntry.MACDCrossedAboveSignal = metrics.MACDCrossedAboveSignal;
+        lookbackEntry.RSIMACDCrossed = metrics.RSIMACDCrossed;
+        lookbackEntry.RSISignalCrossed = metrics.RSISignalCrossed;
+        lookbackEntry.RsiMACDSpread = metrics.RsiMACDSpread;
+        lookbackEntry.RsiMACDSpreadDelta = metrics.RsiMACDSpreadDelta;
+        lookbackEntry.SpreadAcceleration = metrics.SpreadAcceleration;
+        lookbackEntry.RsiSlope = metrics.RsiSlope;
+        lookbackEntry.MacdSlope = metrics.MacdSlope;
+        lookbackEntry.RsiSlopeDeg = metrics.RsiSlopeDeg;
+        lookbackEntry.MacdSlopeDeg = metrics.MacdSlopeDeg;
+        lookbackEntry.SlopeDiff = metrics.SlopeDiff;
+        lookbackEntry.RsiAcceleration = metrics.RsiAcceleration;
+        lookbackEntry.MacdAcceleration = metrics.MacdAcceleration;
+        lookbackEntry.RsiMacdSlopeDiff = metrics.RsiMacdSlopeDiff;
+        lookbackEntry.HistSlope = metrics.HistSlope;
+        lookbackEntry.HistSlopeDeg = metrics.HistSlopeDeg;
+        lookbackEntry.HistAcceleration = metrics.HistAcceleration;
+        lookbackEntry.MacdSignalSlope = metrics.MacdSignalSlope;
+        lookbackEntry.MacdSignalSlopeDeg = metrics.MacdSignalSlopeDeg;
+        lookbackEntry.MacdSpreadAcceleration = metrics.MacdSpreadAcceleration;
+        lookbackEntry.MacdLineSpread = metrics.MacdLineSpread;
+        lookbackEntry.DeltaRSIMACDDistance = metrics.DeltaRSIMACDDistance;
+        lookbackEntry.RsiMacdCross = metrics.RsiMacdCross;
+        lookbackEntry.RsiCrossesAboveMacd = metrics.RsiCrossesAboveMacd;
+        lookbackEntry.RsiCrossesBelowMacd = metrics.RsiCrossesBelowMacd;
+        lookbackEntry.WCloseMinusHMA = metrics.WCloseMinusHMA;
+        lookbackEntry.WCloseDistNorm = metrics.WCloseDistNorm;
+        lookbackEntry.WCloseMedianSpread = metrics.WCloseMedianSpread;
+        lookbackEntry.Body = metrics.Body;
+        lookbackEntry.BodyNorm = metrics.BodyNorm;
+        lookbackEntry.BodyRatio = metrics.BodyRatio;
+        lookbackEntry.BodyRatioDev1 = metrics.BodyRatioDev1;
+        lookbackEntry.BodyRatioDev5 = metrics.BodyRatioDev5;
+        lookbackEntry.BodyRatioDev1Norm = metrics.BodyRatioDev1Norm;
+        lookbackEntry.BodyRatioDev5Norm = metrics.BodyRatioDev5Norm;
+        lookbackEntry.Range = metrics.Range;
+        lookbackEntry.RangeNorm = metrics.RangeNorm;
+        lookbackEntry.VolumeData = metrics.Volume;
+        lookbackEntry.VolumeNorm = metrics.VolumeNorm;
+        lookbackEntry.VolumePriceRatio = metrics.VolumePriceRatio;
+        lookbackEntry.VolumePriceRatioNorm = metrics.VolumePriceRatioNorm;
+        lookbackEntry.Momentum = metrics.Momentum;
+        lookbackEntry.MomentumNorm = metrics.MomentumNorm;
+        lookbackEntry.MomentumRatio = metrics.MomentumRatio;
+        lookbackEntry.MomentumRatioNorm = metrics.MomentumRatioNorm;
+        lookbackEntry.PriceSlope = metrics.PriceSlope;
+        lookbackEntry.PriceSlopeNorm = metrics.PriceSlopeNorm;
+        lookbackEntry.ZScoreVolume = metrics.ZScoreVolume;
+        lookbackEntry.ZScoreVolumeNorm = metrics.ZScoreVolumeNorm;
+        lookbackEntry.ZScoreRSI = metrics.ZScoreRSI;
+        lookbackEntry.ZScoreRSINorm = metrics.ZScoreRSINorm;
+        lookbackEntry.UpperWick = metrics.UpperWick;
+        lookbackEntry.UpperWickRatio = metrics.UpperWickRatio;
+        lookbackEntry.UpperWickRatioNorm = metrics.UpperWickRatioNorm;
+        lookbackEntry.LowerWick = metrics.LowerWick;
+        lookbackEntry.LowerWickRatio = metrics.LowerWickRatio;
+        lookbackEntry.LowerWickRatioNorm = metrics.LowerWickRatioNorm;
+        lookbackEntry.Symmetry = metrics.Symmetry;
+        lookbackEntry.SymmetryNorm = metrics.SymmetryNorm;
+        lookbackEntry.HmaSlope = metrics.HmaSlope;
+        lookbackEntry.HmaSlopeNorm = metrics.HmaSlopeNorm;
+        lookbackEntry.HmaAngle = metrics.HmaAngle;
+        lookbackEntry.HmaAngleNorm = metrics.HmaAngleNorm;
+        lookbackEntry.PriceAngle = metrics.PriceAngle;
+        lookbackEntry.PriceAngleNorm = metrics.PriceAngleNorm;
+        lookbackEntry.HmaCloseDistance = metrics.HmaCloseDistance;
+        lookbackEntry.HmaCloseDistanceNorm = metrics.HmaCloseDistanceNorm;
+        lookbackEntry.ATR = metrics.ATR;
+        lookbackEntry.ATRNorm = metrics.ATRNorm;
+        lookbackEntry.EMA = metrics.EMA;
+        lookbackEntry.EMANorm = metrics.EMANorm;
+        lookbackEntry.EMADistance = metrics.EMADistance;
+        lookbackEntry.EMADistanceNorm = metrics.EMADistanceNorm;
+        lookbackEntry.CompositeScore = metrics.CompositeScore;
+        lookbackEntry.CompositeScoreNorm = metrics.CompositeScoreNorm;
+        lookbackEntry.MicroScore = metrics.MicroScore;
+        lookbackEntry.MicroScoreNorm = metrics.MicroScoreNorm;
+        lookbackEntry.Delta = metrics.Delta;
+        lookbackEntry.DeltaNorm = metrics.DeltaNorm;
+        lookbackEntry.DeltaOverRange = metrics.DeltaOverRange;
+        lookbackEntry.DeltaOverRangeNorm = metrics.DeltaOverRangeNorm;
+        lookbackEntry.PriceDelta = metrics.PriceDelta;
+        lookbackEntry.PriceDeltaNorm = metrics.PriceDeltaNorm;
+        lookbackEntry.DeltaPriceRatio = metrics.DeltaPriceRatio;
+        lookbackEntry.DeltaPriceRatioNorm = metrics.DeltaPriceRatioNorm;
+        lookbackEntry.MomentumAccel = metrics.MomentumAccel;
+        lookbackEntry.MomentumAccelNorm = metrics.MomentumAccelNorm;
+        lookbackEntry.MomentumShift = metrics.MomentumShift;
+        lookbackEntry.MomentumShiftNorm = metrics.MomentumShiftNorm;
+        lookbackEntry.MomentumNow = metrics.MomentumNow;
+        lookbackEntry.MomentumStart = metrics.MomentumStart;
+        lookbackEntry.MomentumPrev = metrics.MomentumPrev;
+        lookbackEntry.MomentumDelta = metrics.MomentumDelta;
+        lookbackEntry.MomentumSlope = metrics.MomentumSlope;
+        lookbackEntry.PrevMomentumNorm = metrics.PrevMomentumNorm;
+        lookbackEntry.HighWickRatio = metrics.HighWickRatio;
+        lookbackEntry.WickImbalanceRatio = metrics.WickImbalanceRatio;
+        lookbackEntry.WickImbalanceRatioNorm = metrics.WickImbalanceRatioNorm;
+        lookbackEntry.WickCountLast5 = metrics.WickCountLast5;
+        lookbackEntry.AvgBodyLast5 = metrics.AvgBodyLast5;
+        lookbackEntry.TotalWickImbalance = metrics.TotalWickImbalance;
+        lookbackEntry.HasBodyRatioSpike = metrics.HasBodyRatioSpike;
+        lookbackEntry.IsEngulfingShape = metrics.IsEngulfingShape;
+        lookbackEntry.IsReversalSignal = metrics.IsReversalSignal;
+        lookbackEntry.OpenHA = metrics.OpenHA;
+        lookbackEntry.HighHA = metrics.HighHA;
+        lookbackEntry.LowHA = metrics.LowHA;
+        lookbackEntry.CloseHA = metrics.CloseHA;
+        lookbackEntry.HaClose = metrics.HaClose;
+        lookbackEntry.HaOpen = metrics.HaOpen;
+        lookbackEntry.HaHigh = metrics.HaHigh;
+        lookbackEntry.HaLow = metrics.HaLow;
+        lookbackEntry.HeikinAshiDelta = metrics.HeikinAshiDelta;
+        lookbackEntry.HeikinAshiDeltaNorm = metrics.HeikinAshiDeltaNorm;
+        lookbackEntry.Open = metrics.Open;
+        lookbackEntry.High = metrics.High;
+        lookbackEntry.Low = metrics.Low;
+        lookbackEntry.Close = metrics.Close;
+        lookbackEntry.TickVolume = metrics.TickVolume;
+        lookbackEntry.UpperWickImbalanceCount = 0;
+        lookbackEntry.LowerWickImbalanceCount = 0;
+        lookbackEntry.SpreadData = 0;
+        lookbackEntry.BidAsk = 0;
+
+        var values = lookbackFields.Select(f => f.GetValue(lookbackEntry)?.ToString() ?? "").ToList();
+        values.Add(""); // IsGlobal empty for lookback rows
+        foreach (var key in globalKeys)
+            values.Add(""); // empty global columns for lookback rows
+        var line = string.Join(",", values) + "\n";
+        File.AppendAllText(customLogFilePath, line);
+    }
+
+    // Write global metrics row
+    var globalRow = new List<string>();
+    foreach (var f in lookbackFields)
+        globalRow.Add(""); // empty lookback columns
+    globalRow.Add("true"); // IsGlobal
+    foreach (var key in globalKeys)
+        globalRow.Add(globalMetrics[key]?.ToString() ?? "");
+    File.AppendAllText(customLogFilePath, string.Join(",", globalRow) + "\n");
+
+} delta / avgRange : 0;
+    double deltaPriceRatio = Math.Abs(priceDelta) > 1e-6 ? delta / priceDelta : 0;
+    double momentum = priceDelta;
+    double momentumRatio = Math.Abs(priceDelta) > 1e-6 ? momentum / priceDelta : 0;
+
+    // Momentum acceleration and shift
+    double momentumAccel = 0, momentumShift = 0;
+    if (closeZone.Length > 3)
+    {
+        double mNow = closeZone[^1] - closeZone[^2];
+        double mPrev = closeZone[^2] - closeZone[^3];
+        momentumShift = mNow - mPrev;
+        if (closeZone.Length > 4)
+        {
+            double mPrev2 = closeZone[^3] - closeZone[^4];
+            momentumAccel = (mNow - mPrev) - (mPrev - mPrev2);
+        }
+    }
+
+    // HMA calculations
+    double hmaSlope = hmaZone.Length > 1 ? hmaZone.Last() - hmaZone.First() : 0;
+    double hmaAngle = Math.Atan2(hmaSlope, hmaZone.Length > 1 ? hmaZone.Length - 1 : 1) * (180.0 / Math.PI);
+    double hmaCloseDistance = hmaZone.Length > 0 && closeZone.Length > 0 ? Math.Abs(hmaZone.Last() - closeZone.Last()) : 0;
+
+    // Price angle
+    double priceAngle = Math.Atan2(priceDelta, closeZone.Length > 1 ? closeZone.Length - 1 : 1) * (180.0 / Math.PI);
+
+    // EMA calculation (21-period)
+    double ema = avgClose;
+    if (closeZone.Length >= 21)
+    {
+        double multiplier = 2.0 / (21 + 1);
+        ema = closeZone[0];
+        for (int i = 1; i < Math.Min(21, closeZone.Length); i++)
+        {
+            ema = (closeZone[i] * multiplier) + (ema * (1 - multiplier));
+        }
+    }
+    double emaDistance = Math.Abs(avgClose - ema);
+
+    // Weighted close calculations
+    double wCloseMinusHMA = 0, wCloseDistNorm = 0, wCloseMedianSpread = 0;
+    if (highZone.Length > 0 && lowZone.Length > 0 && closeZone.Length > 0 && hmaZone.Length > 0)
+    {
+        double weightedClose = (avgHigh + avgLow + 2 * avgClose) / 4;
+        wCloseMinusHMA = weightedClose - hmaZone.Last();
+        wCloseMedianSpread = weightedClose - ((avgHigh + avgLow) / 2);
+        wCloseDistNorm = Math.Abs(hmaZone.Last()) > 1e-6 ? wCloseMinusHMA / hmaZone.Last() : 0;
+    }
+
+    // Composite scores
+    double compositeScore = 0.6 * avgBodyRatio + 0.4 * (1 - symmetry);
+    double microScore = avgBodyRatio + (1 - symmetry);
+
+    // Wick analysis
+    double highWickRatio = (upperWick + lowerWick) / (avgRange + 1e-6);
+    double wickImbalanceRatio = highWickRatio;
+
+    // Wick count analysis
+    int wickCountLast5 = 0;
+    int upperWickImbalanceCount = 0;
+    int lowerWickImbalanceCount = 0;
+    int totalWickImbalance = 0;
+    double avgBodyLast5 = 0;
+
+    if (closeZone.Length >= 5)
+    {
+        for (int i = Math.Max(0, closeZone.Length - 5); i < closeZone.Length - 1; i++)
+        {
+            double barHigh = highZone[i];
+            double barLow = lowZone[i];
+            double barClose = closeZone[i];
+            double barOpen = i > 0 ? closeZone[i - 1] : closeZone[i];
+            double barRange = barHigh - barLow;
+            double barUpperWick = barHigh - Math.Max(barClose, barOpen);
+            double barLowerWick = Math.Min(barClose, barOpen) - barLow;
+
+            if (barRange > 0)
+            {
+                if (barUpperWick / barRange > 0.3)
+                {
+                    wickCountLast5++;
+                    upperWickImbalanceCount++;
+                }
+                if (barLowerWick / barRange > 0.3)
+                {
+                    wickCountLast5++;
+                    lowerWickImbalanceCount++;
+                }
+            }
+        }
+        totalWickImbalance = Math.Abs(upperWickImbalanceCount - lowerWickImbalanceCount);
+        avgBodyLast5 = SafeAvg(bodyArr.Skip(Math.Max(0, bodyArr.Length - 5)));
+    }
+
+    // Body ratio deviations
+    double bodyRatioDev1 = 0, bodyRatioDev5 = 0;
+    if (closeZone.Length >= 5)
+    {
+        double[] bodyRatios = new double[Math.Min(5, closeZone.Length - 1)];
+        for (int i = 0; i < bodyRatios.Length; i++)
+        {
+            int idx = closeZone.Length - 2 - i;
+            double barRange = highZone[idx] - lowZone[idx];
+            bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+        }
+        double avgBodyRatio5 = SafeAvg(bodyRatios);
+        bodyRatioDev1 = avgBodyRatio - avgBodyRatio5;
+    }
+
+    if (closeZone.Length >= 20)
+    {
+        double[] bodyRatios = new double[Math.Min(20, closeZone.Length - 1)];
+        for (int i = 0; i < bodyRatios.Length; i++)
+        {
+            int idx = closeZone.Length - 2 - i;
+            double barRange = highZone[idx] - lowZone[idx];
+            bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+        }
+        double avgBodyRatio20 = SafeAvg(bodyRatios);
+        bodyRatioDev5 = avgBodyRatio - avgBodyRatio20;
+    }
+
+    // Previous bar metrics
+    double prevBody = closeZone.Length > 2 ? Math.Abs(closeZone[^2] - closeZone[^3]) : 0;
+    double prevRange = highZone.Length > 2 && lowZone.Length > 2 ? highZone[^2] - lowZone[^2] : 0;
+    double prevVolume = (Bars != null && Bars.TickVolumes.Count > to - 1) ? Bars.TickVolumes[to - 1] : 0;
+    double prevBodyRatio = prevRange > 0 ? prevBody / prevRange : 0;
+    int prevIsBullish = (closeZone.Length > 2 && closeZone[^2] > closeZone[^3]) ? 1 : 0;
+    double prevMomentumNorm = (closeZone.Length > 3 && Math.Abs(closeZone[^3]) > 1e-6) ? (closeZone[^2] - closeZone[^3]) / closeZone[^3] : 0;
+
+    // Spike potential
+    int spikePotentialIndex = 0;
+    if (bodyArr.Length >= 5)
+        spikePotentialIndex = bodyArr.Skip(bodyArr.Length - 5).Count(b => b > avgBody * 1.5);
+
+    // Heikin Ashi calculations
+    double avgOpen = closeZone.Length > 1 ? closeZone[0] : avgClose;
+    double open_ha = (avgOpen + avgClose) / 2;
+    double high_ha = avgHigh;
+    double low_ha = avgLow;
+    double closePrice = closeZone.Length > 0 ? closeZone.Last() : 0;
+    double haClose = (avgOpen + avgHigh + avgLow + avgClose) / 4;
+    double haOpen = (open_ha + haClose) / 2;
+    double haHigh = Math.Max(Math.Max(high_ha, haOpen), haClose);
+    double haLow = Math.Min(Math.Min(low_ha, haOpen), haClose);
+    double heikinAshiDelta = haClose - haOpen;
+
+    // Build global metrics dictionary
+    var globalMetrics = new Dictionary<string, object>();
+
+    // Add BarIndex, Time, TimeFrame from LookbackEntry
+    if (lookbackMetricsList.Count > 0)
+    {
+        globalMetrics["BarIndex"] = to;
+        globalMetrics["Time"] = Bars != null && Bars.OpenTimes.Count > to ? Bars.OpenTimes[to] : DateTime.Now;
+        globalMetrics["TimeFrame"] = TimeFrame.ToString();
+    }
+
+    // Basic indicator metrics
+    globalMetrics.Add("avgRsi", SafeAvg(rsiZone));
+    globalMetrics.Add("maxRsi", SafeMax(rsiZone));
+    globalMetrics.Add("minRsi", SafeMin(rsiZone));
+    globalMetrics.Add("avgMacd", SafeAvg(macdZone));
+    globalMetrics.Add("maxMacd", SafeMax(macdZone));
+    globalMetrics.Add("minMacd", SafeMin(macdZone));
+    globalMetrics.Add("macdSpread", SafeMax(macdZone) - SafeMin(macdZone));
+    globalMetrics.Add("macdDelta", macdZone.Length > 1 ? macdZone.Last() - macdZone.First() : 0);
+    globalMetrics.Add("avgSignal", SafeAvg(signalZone));
+    globalMetrics.Add("maxSignal", SafeMax(signalZone));
+    globalMetrics.Add("minSignal", SafeMin(signalZone));
+    globalMetrics.Add("avgHistStrength", SafeAvg(histZone.Select(Math.Abs)));
+    globalMetrics.Add("histogramDelta", histZone.Length > 1 ? histZone.Last() - histZone.First() : 0);
+    globalMetrics.Add("avgRSIMACDDistance", SafeAvg(rsiMacdDistZone));
+
+    // HMA and weighted close metrics
+    globalMetrics.Add("wCloseMinusHMA", wCloseMinusHMA);
+    globalMetrics.Add("wCloseDistNorm", wCloseDistNorm);
+    globalMetrics.Add("wCloseMedianSpread", wCloseMedianSpread);
+    globalMetrics.Add("hmaSlope", hmaSlope);
+    globalMetrics.Add("hmaSlopeNorm", Math.Abs(hmaZone.Last()) > 1e-6 ? hmaSlope / hmaZone.Last() : 0);
+    globalMetrics.Add("hmaAngle", hmaAngle);
+    globalMetrics.Add("hmaAngleNorm", avgClose > 1e-6 ? hmaAngle / avgClose : 0);
+    globalMetrics.Add("hmaCloseDistance", hmaCloseDistance);
+    globalMetrics.Add("hmaCloseDistanceNorm", currentAtr > 1e-6 ? hmaCloseDistance / currentAtr : 0);
+
+    // ATR and EMA metrics
+    globalMetrics.Add("atr", currentAtr);
+    globalMetrics.Add("atrNorm", 1.0); // ATR normalized by itself is always 1
+    globalMetrics.Add("ema", ema);
+    globalMetrics.Add("emaNorm", avgClose > 1e-6 ? ema / avgClose : 0);
+    globalMetrics.Add("emaDistance", emaDistance);
+    globalMetrics.Add("emaDistanceNorm", currentAtr > 1e-6 ? emaDistance / currentAtr : 0);
+
+    // Price metrics
+    globalMetrics.Add("priceAngle", priceAngle);
+    globalMetrics.Add("priceAngleNorm", avgClose > 1e-6 ? priceAngle / avgClose : 0);
+
+    // Body, range, volume metrics
+    globalMetrics.Add("avgBody", avgBody);
+    globalMetrics.Add("avgBodyNorm", currentAtr > 1e-6 ? avgBody / currentAtr : 0);
+    globalMetrics.Add("avgRange", avgRange);
+    globalMetrics.Add("avgRangeNorm", currentAtr > 1e-6 ? avgRange / currentAtr : 0);
+    globalMetrics.Add("avgBodyRatio", avgBodyRatio);
+    globalMetrics.Add("avgBodyRatioNorm", avgClose > 1e-6 ? avgBodyRatio / avgClose : 0);
+    globalMetrics.Add("avgVolume", avgVolume);
+    globalMetrics.Add("avgVolumeNorm", avgClose > 1e-6 ? avgVolume / avgClose : 0);
+    globalMetrics.Add("avgVolumePriceRatio", avgVolumePriceRatio);
+    globalMetrics.Add("avgVolumePriceRatioNorm", avgClose > 1e-6 ? avgVolumePriceRatio / avgClose : 0);
+
+    // Z-Score metrics
+    globalMetrics.Add("zScoreRSI", zScoreRSI);
+    globalMetrics.Add("zScoreRSINorm", avgClose > 1e-6 ? zScoreRSI / avgClose : 0);
+    globalMetrics.Add("zScoreVolume", zScoreVolume);
+    globalMetrics.Add("zScoreVolumeNorm", avgClose > 1e-6 ? zScoreVolume / avgClose : 0);
+
+    // Symmetry and wick metrics
+    globalMetrics.Add("symmetry", symmetry);
+    globalMetrics.Add("symmetryNorm", avgClose > 1e-6 ? symmetry / avgClose : 0);
+    globalMetrics.Add("upperWickImbalanceCount", upperWickImbalanceCount);
+    globalMetrics.Add("lowerWickImbalanceCount", lowerWickImbalanceCount);
+    globalMetrics.Add("totalWickImbalance", totalWickImbalance);
+    globalMetrics.Add("wickCountLast5", wickCountLast5);
+    globalMetrics.Add("avgBodyLast5", avgBodyLast5);
+    globalMetrics.Add("highWickRatio", highWickRatio);
+    globalMetrics.Add("wickImbalanceRatio", wickImbalanceRatio);
+    globalMetrics.Add("wickImbalanceRatioNorm", avgClose > 1e-6 ? wickImbalanceRatio / avgClose : 0);
+
+    // Delta and momentum metrics
+    globalMetrics.Add("deltaOverRange", deltaOverRange);
+    globalMetrics.Add("deltaOverRangeNorm", Math.Abs(hmaZone.Last()) > 1e-6 ? deltaOverRange / hmaZone.Last() : 0);
+    globalMetrics.Add("momentumRatio", momentumRatio);
+    globalMetrics.Add("momentumRatioNorm", avgClose > 1e-6 ? momentumRatio / avgClose : 0);
+    globalMetrics.Add("bodyRatioDev1", bodyRatioDev1);
+    globalMetrics.Add("bodyRatioDev5", bodyRatioDev5);
+    globalMetrics.Add("bodyRatioDev1Norm", avgClose > 1e-6 ? bodyRatioDev1 / avgClose : 0);
+    globalMetrics.Add("bodyRatioDev5Norm", avgClose > 1e-6 ? bodyRatioDev5 / avgClose : 0);
+
+    // Additional metrics
+    globalMetrics.Add("spikePotentialIndex", spikePotentialIndex);
+    globalMetrics.Add("momentumShift", momentumShift);
+    globalMetrics.Add("momentumShiftNorm", currentAtr > 1e-6 ? momentumShift / currentAtr : 0);
+    globalMetrics.Add("isEngulfingShape", 0); // Removed spike detection
+    globalMetrics.Add("isReversalSignal", 0); // Removed spike detection
+    globalMetrics.Add("hasBodyRatioSpike", false); // Removed spike detection
+
+    // Previous bar metrics
+    globalMetrics.Add("prevBody", prevBody);
+    globalMetrics.Add("prevBodyNorm", currentAtr > 1e-6 ? prevBody / currentAtr : 0);
+    globalMetrics.Add("prevRange", prevRange);
+    globalMetrics.Add("prevRangeNorm", currentAtr > 1e-6 ? prevRange / currentAtr : 0);
+    globalMetrics.Add("prevBodyRatio", prevBodyRatio);
+    globalMetrics.Add("prevBodyRatioNorm", avgClose > 1e-6 ? prevBodyRatio / avgClose : 0);
+    globalMetrics.Add("prevVolume", prevVolume);
+    globalMetrics.Add("prevVolumeNorm", avgClose > 1e-6 ? prevVolume / avgClose : 0);
+    globalMetrics.Add("prevIsBullish", prevIsBullish);
+    globalMetrics.Add("prevMomentumNorm", prevMomentumNorm);
+
+    // Normalized metrics
+    globalMetrics.Add("bodyNorm", currentAtr > 1e-6 ? avgBody / currentAtr : 0);
+    globalMetrics.Add("rangeNorm", currentAtr > 1e-6 ? avgRange / currentAtr : 0);
+    globalMetrics.Add("momentumAccelNorm", currentAtr > 1e-6 ? momentumAccel / currentAtr : 0);
+    globalMetrics.Add("priceChangeNorm", currentAtr > 1e-6 ? priceDelta / currentAtr : 0);
+    globalMetrics.Add("priceSlopeNorm", currentAtr > 1e-6 ? priceDelta / currentAtr : 0);
+    globalMetrics.Add("deltaNorm", currentAtr > 1e-6 ? delta / currentAtr : 0);
+    globalMetrics.Add("hmaCloseDistNorm", currentAtr > 1e-6 ? hmaCloseDistance / currentAtr : 0);
+    globalMetrics.Add("volumePriceRatioNorm", avgClose > 1e-6 ? avgVolumePriceRatio / avgClose : 0);
+    globalMetrics.Add("compositeScoreNorm", avgClose > 1e-6 ? compositeScore / avgClose : 0);
+    globalMetrics.Add("microScoreNorm", avgClose > 1e-6 ? microScore / avgClose : 0);
+
+    // Wick normalized metrics
+    globalMetrics.Add("wickTopNorm", currentAtr > 1e-6 ? upperWick / currentAtr : 0);
+    globalMetrics.Add("wickBottomNorm", currentAtr > 1e-6 ? lowerWick / currentAtr : 0);
+    globalMetrics.Add("upperWickRatioNorm", avgClose > 1e-6 ? upperWickRatio / avgClose : 0);
+    globalMetrics.Add("lowerWickRatioNorm", avgClose > 1e-6 ? lowerWickRatio / avgClose : 0);
+
+    // Heikin Ashi metrics
+    globalMetrics.Add("open_ha", open_ha);
+    globalMetrics.Add("high_ha", high_ha);
+    globalMetrics.Add("low_ha", low_ha);
+    globalMetrics.Add("closePrice", closePrice);
+    globalMetrics.Add("haClose", haClose);
+    globalMetrics.Add("haOpen", haOpen);
+    globalMetrics.Add("haHigh", haHigh);
+    globalMetrics.Add("haLow", haLow);
+    globalMetrics.Add("heikinAshiDelta", heikinAshiDelta);
+    globalMetrics.Add("heikinAshiDeltaNorm", currentAtr > 1e-6 ? heikinAshiDelta / currentAtr : 0);
+
+    // Composite scores
+    globalMetrics.Add("compositeScore", compositeScore);
+    globalMetrics.Add("microScore", microScore);
+
+    // Analyzer metrics
+    if (_analyzer != null)
+    {
+        globalMetrics.Add("RsiSlope", _analyzer.RsiSlope);
+        globalMetrics.Add("MacdSlope", _analyzer.MacdSlope);
+        globalMetrics.Add("RsiDelta", _analyzer.RsiDelta);
+        globalMetrics.Add("MacdDelta", _analyzer.MacdDelta);
+        globalMetrics.Add("RsiMACDSpread", _analyzer.RsiMACDSpread);
+        globalMetrics.Add("RsiMACDSpreadDelta", _analyzer.RsiMACDSpreadDelta);
+        globalMetrics.Add("AvgRSIMACDDistance", _analyzer.AvgRSIMACDDistance);
+        globalMetrics.Add("DeltaRSIMACDDistance", _analyzer.DeltaRSIMACDDistance);
+        globalMetrics.Add("MacdLineSpread", _analyzer.MacdLineSpread);
+        globalMetrics.Add("MacdSpreadAcceleration", _analyzer.MacdSpreadAcceleration);
+        globalMetrics.Add("MacdSignalSlope", _analyzer.MacdSignalSlope);
+        globalMetrics.Add("HistDelta", _analyzer.HistDelta);
+        globalMetrics.Add("HistSlope", _analyzer.HistSlope);
+        globalMetrics.Add("HistStrength", _analyzer.HistStrength);
+        globalMetrics.Add("HistAcceleration", _analyzer.HistAcceleration);
+        globalMetrics.Add("HistogramDivergence", _analyzer.HistogramDivergence ? 1 : 0);
+        globalMetrics.Add("RsiAcceleration", _analyzer.RsiAcceleration);
+        globalMetrics.Add("MacdAcceleration", _analyzer.MacdAcceleration);
+        globalMetrics.Add("RsiMacdSlopeDiff", _analyzer.RsiMacdSlopeDiff);
+        globalMetrics.Add("RsiSlopeDeg", _analyzer.RsiSlopeDeg);
+        globalMetrics.Add("MacdSlopeDeg", _analyzer.MacdSlopeDeg);
+        globalMetrics.Add("HistSlopeDeg", _analyzer.HistSlopeDeg);
+        globalMetrics.Add("MacdSignalSlopeDeg", _analyzer.MacdSignalSlopeDeg);
+        globalMetrics.Add("WCloseMinusHMA", _analyzer.WCloseMinusHMA);
+        globalMetrics.Add("WCloseDistNorm", _analyzer.WCloseDistNorm);
+        globalMetrics.Add("WCloseMedianSpread", _analyzer.WCloseMedianSpread);
+        globalMetrics.Add("RsiMacdCross", _analyzer.RsiMacdCross);
+        globalMetrics.Add("RsiCrossesAboveMacd", _analyzer.RsiCrossesAboveMacd);
+        globalMetrics.Add("RsiCrossesBelowMacd", _analyzer.RsiCrossesBelowMacd);
+    }
+
+    // Compose header
+    var globalKeys = globalMetrics.Keys.ToList();
+    var header = string.Join(",", lookbackFields.Select(f => f.Name)) + ",IsGlobal," + string.Join(",", globalKeys) + "\n";
+    File.WriteAllText(customLogFilePath, header);
+
+    // Write LookbackEntry rows
+    foreach (var metrics in lookbackMetricsList)
+    {
+        var lookbackEntry = new LookbackEntry();
+
+        // Assign all LookbackEntry fields
+        lookbackEntry.BarIndex = to;
+        lookbackEntry.Time = Bars != null && Bars.OpenTimes.Count > to ? Bars.OpenTimes[to] : DateTime.Now;
+        lookbackEntry.TimeFrame = TimeFrame.ToString();
+        lookbackEntry.Lookback = metrics.Lookback;
+        lookbackEntry.RSIMacdDistance = metrics.RSIMacdDistance;
+        lookbackEntry.RSISignalDistance = metrics.RSISignalDistance;
+        lookbackEntry.RSIHistogramDistance = metrics.RSIHistogramDistance;
+        lookbackEntry.RSIMacdSlopeDeg = metrics.RSIMacdSlopeDeg;
+        lookbackEntry.RSIMacdDelta = metrics.RSIMacdDelta;
+        lookbackEntry.RSISignalSlopeDeg = metrics.RSISignalSlopeDeg;
+        lookbackEntry.RSISignalDelta = metrics.RSISignalDelta;
+        lookbackEntry.HistogramDelta = metrics.HistogramDelta;
+        lookbackEntry.RSIAboveMACD = metrics.RSIAboveMACD;
+        lookbackEntry.RSIAboveSignal = metrics.RSIAboveSignal;
+        lookbackEntry.RSIAboveHistogram = metrics.RSIAboveHistogram;
+        lookbackEntry.MACDCrossedAboveSignal = metrics.MACDCrossedAboveSignal;
+        lookbackEntry.RSIMACDCrossed = metrics.RSIMACDCrossed;
+        lookbackEntry.RSISignalCrossed = metrics.RSISignalCrossed;
+        lookbackEntry.RsiMACDSpread = metrics.RsiMACDSpread;
+        lookbackEntry.RsiMACDSpreadDelta = metrics.RsiMACDSpreadDelta;
+        lookbackEntry.SpreadAcceleration = metrics.SpreadAcceleration;
+        lookbackEntry.RsiSlope = metrics.RsiSlope;
+        lookbackEntry.MacdSlope = metrics.MacdSlope;
+        lookbackEntry.RsiSlopeDeg = metrics.RsiSlopeDeg;
+        lookbackEntry.MacdSlopeDeg = metrics.MacdSlopeDeg;
+        lookbackEntry.SlopeDiff = metrics.SlopeDiff;
+        lookbackEntry.RsiAcceleration = metrics.RsiAcceleration;
+        lookbackEntry.MacdAcceleration = metrics.MacdAcceleration;
+        lookbackEntry.RsiMacdSlopeDiff = metrics.RsiMacdSlopeDiff;
+        lookbackEntry.HistSlope = metrics.HistSlope;
+        lookbackEntry.HistSlopeDeg = metrics.HistSlopeDeg;
+        lookbackEntry.HistAcceleration = metrics.HistAcceleration;
+        lookbackEntry.MacdSignalSlope = metrics.MacdSignalSlope;
+        lookbackEntry.MacdSignalSlopeDeg = metrics.MacdSignalSlopeDeg;
+        lookbackEntry.MacdSpreadAcceleration = metrics.MacdSpreadAcceleration;
+        lookbackEntry.MacdLineSpread = metrics.MacdLineSpread;
+        lookbackEntry.DeltaRSIMACDDistance = metrics.DeltaRSIMACDDistance;
+        lookbackEntry.RsiMacdCross = metrics.RsiMacdCross;
+        lookbackEntry.RsiCrossesAboveMacd = metrics.RsiCrossesAboveMacd;
+        lookbackEntry.RsiCrossesBelowMacd = metrics.RsiCrossesBelowMacd;
+        lookbackEntry.WCloseMinusHMA = metrics.WCloseMinusHMA;
+        lookbackEntry.WCloseDistNorm = metrics.WCloseDistNorm;
+        lookbackEntry.WCloseMedianSpread = metrics.WCloseMedianSpread;
+        lookbackEntry.Body = metrics.Body;
+        lookbackEntry.BodyNorm = metrics.BodyNorm;
+        lookbackEntry.BodyRatio = metrics.BodyRatio;
+        lookbackEntry.BodyRatioDev1 = metrics.BodyRatioDev1;
+        lookbackEntry.BodyRatioDev5 = metrics.BodyRatioDev5;
+        lookbackEntry.BodyRatioDev1Norm = metrics.BodyRatioDev1Norm;
+        lookbackEntry.BodyRatioDev5Norm = metrics.BodyRatioDev5Norm;
+        lookbackEntry.Range = metrics.Range;
+        lookbackEntry.RangeNorm = metrics.RangeNorm;
+        lookbackEntry.Volume = metrics.Volume;
+        lookbackEntry.VolumeNorm = metrics.VolumeNorm;
+        lookbackEntry.VolumePriceRatio = metrics.VolumePriceRatio;
+        lookbackEntry.VolumePriceRatioNorm = metrics.VolumePriceRatioNorm;
+        lookbackEntry.Momentum = metrics.Momentum;
+        lookbackEntry.MomentumNorm = metrics.MomentumNorm;
+        lookbackEntry.MomentumRatio = metrics.MomentumRatio;
+        lookbackEntry.MomentumRatioNorm = metrics.MomentumRatioNorm;
+        lookbackEntry.PriceSlope = metrics.PriceSlope;
+        lookbackEntry.PriceSlopeNorm = metrics.PriceSlopeNorm;
+        lookbackEntry.ZScoreVolume = metrics.ZScoreVolume;
+        lookbackEntry.ZScoreVolumeNorm = metrics.ZScoreVolumeNorm;
+        lookbackEntry.ZScoreRSI = metrics.ZScoreRSI;
+        lookbackEntry.ZScoreRSINorm = metrics.ZScoreRSINorm;
+        lookbackEntry.UpperWick = metrics.UpperWick;
+        lookbackEntry.UpperWickRatio = metrics.UpperWickRatio;
+        lookbackEntry.UpperWickRatioNorm = metrics.UpperWickRatioNorm;
+        lookbackEntry.LowerWick = metrics.LowerWick;
+        lookbackEntry.LowerWickRatio = metrics.LowerWickRatio;
+        lookbackEntry.LowerWickRatioNorm = metrics.LowerWickRatioNorm;
+        lookbackEntry.Symmetry = metrics.Symmetry;
+        lookbackEntry.SymmetryNorm = metrics.SymmetryNorm;
+        lookbackEntry.HmaSlope = metrics.HmaSlope;
+        lookbackEntry.HmaSlopeNorm = metrics.HmaSlopeNorm;
+        lookbackEntry.HmaAngle = metrics.HmaAngle;
+        lookbackEntry.HmaAngleNorm = metrics.HmaAngleNorm;
+        lookbackEntry.PriceAngle = metrics.PriceAngle;
+        lookbackEntry.PriceAngleNorm = metrics.PriceAngleNorm;
+        lookbackEntry.HmaCloseDistance = metrics.HmaCloseDistance;
+        lookbackEntry.HmaCloseDistanceNorm = metrics.HmaCloseDistanceNorm;
+        lookbackEntry.ATR = metrics.ATR;
+        lookbackEntry.ATRNorm = metrics.ATRNorm;
+        lookbackEntry.EMA = metrics.EMA;
+        lookbackEntry.EMANorm = metrics.EMANorm;
+        lookbackEntry.EMADistance = metrics.EMADistance;
+        lookbackEntry.EMADistanceNorm = metrics.EMADistanceNorm;
+        lookbackEntry.CompositeScore = metrics.CompositeScore;
+        lookbackEntry.CompositeScoreNorm = metrics.CompositeScoreNorm;
+        lookbackEntry.MicroScore = metrics.MicroScore;
+        lookbackEntry.MicroScoreNorm = metrics.MicroScoreNorm;
+        lookbackEntry.Delta = metrics.Delta;
+        lookbackEntry.DeltaNorm = metrics.DeltaNorm;
+        lookbackEntry.DeltaOverRange = metrics.DeltaOverRange;
+        lookbackEntry.DeltaOverRangeNorm = metrics.DeltaOverRangeNorm;
+        lookbackEntry.PriceDelta = metrics.PriceDelta;
+        lookbackEntry.PriceDeltaNorm = metrics.PriceDeltaNorm;
+        lookbackEntry.DeltaPriceRatio = metrics.DeltaPriceRatio;
+        lookbackEntry.DeltaPriceRatioNorm = metrics.DeltaPriceRatioNorm;
+        lookbackEntry.MomentumAccel = metrics.MomentumAccel;
+        lookbackEntry.MomentumAccelNorm = metrics.MomentumAccelNorm;
+        lookbackEntry.MomentumShift = metrics.MomentumShift;
+        lookbackEntry.MomentumShiftNorm = metrics.MomentumShiftNorm;
+        lookbackEntry.MomentumNow = metrics.MomentumNow;
+        lookbackEntry.MomentumStart = metrics.MomentumStart;
+        lookbackEntry.MomentumPrev = metrics.MomentumPrev;
+        lookbackEntry.MomentumDelta = metrics.MomentumDelta;
+        lookbackEntry.MomentumSlope = metrics.MomentumSlope;
+        lookbackEntry.PrevMomentumNorm = metrics.PrevMomentumNorm;
+        lookbackEntry.HighWickRatio = metrics.HighWickRatio;
+        lookbackEntry.WickImbalanceRatio = metrics.WickImbalanceRatio;
+        lookbackEntry.WickImbalanceRatioNorm = metrics.WickImbalanceRatioNorm;
+        lookbackEntry.WickCountLast5 = metrics.WickCountLast5;
+        lookbackEntry.AvgBodyLast5 = metrics.AvgBodyLast5;
+        lookbackEntry.TotalWickImbalance = metrics.TotalWickImbalance;
+        lookbackEntry.HasBodyRatioSpike = metrics.HasBodyRatioSpike;
+        lookbackEntry.IsEngulfingShape = metrics.IsEngulfingShape;
+        lookbackEntry.IsReversalSignal = metrics.IsReversalSignal;
+        lookbackEntry.OpenHA = metrics.OpenHA;
+        lookbackEntry.HighHA = metrics.HighHA;
+        lookbackEntry.LowHA = metrics.LowHA;
+        lookbackEntry.CloseHA = metrics.CloseHA;
+        lookbackEntry.HaClose = metrics.HaClose;
+        lookbackEntry.HaOpen = metrics.HaOpen;
+        lookbackEntry.HaHigh = metrics.HaHigh;
+        lookbackEntry.HaLow = metrics.HaLow;
+        lookbackEntry.HeikinAshiDelta = metrics.HeikinAshiDelta;
+        lookbackEntry.HeikinAshiDeltaNorm = metrics.HeikinAshiDeltaNorm;
+        lookbackEntry.Open = metrics.Open;
+        lookbackEntry.High = metrics.High;
+        lookbackEntry.Low = metrics.Low;
+        lookbackEntry.Close = metrics.Close;
+        lookbackEntry.TickVolume = metrics.TickVolume;
+        lookbackEntry.UpperWickImbalanceCount = 0;
+        lookbackEntry.LowerWickImbalanceCount = 0;
+        lookbackEntry.SpreadData = 0;
+        lookbackEntry.BidAsk = 0;
+
+        var values = lookbackFields.Select(f => f.GetValue(lookbackEntry)?.ToString() ?? "").ToList();
+        values.Add(""); // IsGlobal empty for lookback rows
+        foreach (var key in globalKeys)
+            values.Add(""); // empty global columns for lookback rows
+        var line = string.Join(",", values) + "\n";
+        File.AppendAllText(customLogFilePath, line);
+    }
+
+    // Write global metrics row
+    var globalRow = new List<string>();
+    foreach (var f in lookbackFields)
+        globalRow.Add(""); // empty lookback columns
+    globalRow.Add("true"); // IsGlobal
+    foreach (var key in globalKeys)
+        globalRow.Add(globalMetrics[key]?.ToString() ?? "");
+    File.AppendAllText(customLogFilePath, string.Join(",", globalRow) + "\n");
+
+}
+
+        private double GetVolumePriceRatio(int index)
+        {
+            double volume = Bars.TickVolumes[index];
+            double range = Bars.HighPrices[index] - Bars.LowPrices[index];
+            return range != 0 ? volume / range : 0;
+        }
+
+
+        private void LogSpikeRegion(int startIndex, int endIndex)
+        {
+
+            // === Централизирано lookback-базирано логване чрез IndicatorAnalyzer ===
+            int[] lookbacks = new int[] { 1, 2, 3, 5, 8, 12, 14, 20, 30, 40, 50, 60 };
+            var lookbackMetricsList = _analyzer.AnalyzeLookbacks(lookbacks, endIndex);
+            // --- Логване на header за LookbackEntry ако файлът е нов ---
+            var lookbackFields = typeof(LookbackEntry).GetFields();
+            if (!File.Exists(logFilePath) || !File.ReadLines(logFilePath).Any(l => l.StartsWith("Lookback,")))
+            {
+                var lookbackHeader = string.Join(",", lookbackFields.Select(f => f.Name)) + "\n";
+                File.AppendAllText(logFilePath, lookbackHeader);
+            }
+            foreach (var metrics in lookbackMetricsList)
+            {
+                var lookbackEntry = new LookbackEntry();
+                // Присвояване на всички LookbackEntry полета поименно
+                lookbackEntry.Lookback = metrics.Lookback;
+                lookbackEntry.RSIMacdDistance = metrics.RSIMacdDistance;
+                lookbackEntry.RSISignalDistance = metrics.RSISignalDistance;
+                lookbackEntry.RSIHistogramDistance = metrics.RSIHistogramDistance;
+                lookbackEntry.RSIMacdSlopeDeg = metrics.RSIMacdSlopeDeg;
+                lookbackEntry.RSIMacdDelta = metrics.RSIMacdDelta;
+                lookbackEntry.RSISignalSlopeDeg = metrics.RSISignalSlopeDeg;
+                lookbackEntry.RSISignalDelta = metrics.RSISignalDelta;
+                lookbackEntry.HistogramDelta = metrics.HistogramDelta;
+                lookbackEntry.RSIAboveMACD = metrics.RSIAboveMACD;
+                lookbackEntry.RSIAboveSignal = metrics.RSIAboveSignal;
+                lookbackEntry.RSIAboveHistogram = metrics.RSIAboveHistogram;
+                lookbackEntry.MACDCrossedAboveSignal = metrics.MACDCrossedAboveSignal;
+                lookbackEntry.RSIMACDCrossed = metrics.RSIMACDCrossed;
+                lookbackEntry.RSISignalCrossed = metrics.RSISignalCrossed;
+                lookbackEntry.RsiMACDSpread = metrics.RsiMACDSpread;
+                lookbackEntry.RsiMACDSpreadDelta = metrics.RsiMACDSpreadDelta;
+                lookbackEntry.SpreadAcceleration = metrics.SpreadAcceleration;
+                lookbackEntry.RsiSlope = metrics.RsiSlope;
+                lookbackEntry.MacdSlope = metrics.MacdSlope;
+                lookbackEntry.RsiSlopeDeg = metrics.RsiSlopeDeg;
+                lookbackEntry.MacdSlopeDeg = metrics.MacdSlopeDeg;
+                lookbackEntry.SlopeDiff = metrics.SlopeDiff;
+                lookbackEntry.RsiAcceleration = metrics.RsiAcceleration;
+                lookbackEntry.MacdAcceleration = metrics.MacdAcceleration;
+                lookbackEntry.RsiMacdSlopeDiff = metrics.RsiMacdSlopeDiff;
+                lookbackEntry.HistSlope = metrics.HistSlope;
+                lookbackEntry.HistSlopeDeg = metrics.HistSlopeDeg;
+                lookbackEntry.HistAcceleration = metrics.HistAcceleration;
+                lookbackEntry.MacdSignalSlope = metrics.MacdSignalSlope;
+                lookbackEntry.MacdSignalSlopeDeg = metrics.MacdSignalSlopeDeg;
+                lookbackEntry.MacdSpreadAcceleration = metrics.MacdSpreadAcceleration;
+                lookbackEntry.MacdLineSpread = metrics.MacdLineSpread;
+                lookbackEntry.DeltaRSIMACDDistance = metrics.DeltaRSIMACDDistance;
+                lookbackEntry.RsiMacdCross = metrics.RsiMacdCross;
+                lookbackEntry.RsiCrossesAboveMacd = metrics.RsiCrossesAboveMacd;
+                lookbackEntry.RsiCrossesBelowMacd = metrics.RsiCrossesBelowMacd;
+                lookbackEntry.WCloseMinusHMA = metrics.WCloseMinusHMA;
+                lookbackEntry.WCloseDistNorm = metrics.WCloseDistNorm;
+                lookbackEntry.WCloseMedianSpread = metrics.WCloseMedianSpread;
+                lookbackEntry.Body = metrics.Body;
+                lookbackEntry.BodyNorm = metrics.BodyNorm;
+                lookbackEntry.BodyRatio = metrics.BodyRatio;
+                lookbackEntry.BodyRatioDev1 = metrics.BodyRatioDev1;
+                lookbackEntry.BodyRatioDev5 = metrics.BodyRatioDev5;
+                lookbackEntry.BodyRatioDev1Norm = metrics.BodyRatioDev1Norm;
+                lookbackEntry.BodyRatioDev5Norm = metrics.BodyRatioDev5Norm;
+                lookbackEntry.Range = metrics.Range;
+                lookbackEntry.RangeNorm = metrics.RangeNorm;
+                lookbackEntry.VolumeData = metrics.Volume;
+                lookbackEntry.VolumeNorm = metrics.VolumeNorm;
+                lookbackEntry.VolumePriceRatio = metrics.VolumePriceRatio;
+                lookbackEntry.VolumePriceRatioNorm = metrics.VolumePriceRatioNorm;
+                lookbackEntry.Momentum = metrics.Momentum;
+                lookbackEntry.MomentumNorm = metrics.MomentumNorm;
+                lookbackEntry.MomentumRatio = metrics.MomentumRatio;
+                lookbackEntry.MomentumRatioNorm = metrics.MomentumRatioNorm;
+                lookbackEntry.PriceSlope = metrics.PriceSlope;
+                lookbackEntry.PriceSlopeNorm = metrics.PriceSlopeNorm;
+                lookbackEntry.ZScoreVolume = metrics.ZScoreVolume;
+                lookbackEntry.ZScoreVolumeNorm = metrics.ZScoreVolumeNorm;
+                lookbackEntry.ZScoreRSI = metrics.ZScoreRSI;
+                lookbackEntry.ZScoreRSINorm = metrics.ZScoreRSINorm;
+                lookbackEntry.UpperWick = metrics.UpperWick;
+                lookbackEntry.UpperWickRatio = metrics.UpperWickRatio;
+                lookbackEntry.UpperWickRatioNorm = metrics.UpperWickRatioNorm;
+                lookbackEntry.LowerWick = metrics.LowerWick;
+                lookbackEntry.LowerWickRatio = metrics.LowerWickRatio;
+                lookbackEntry.LowerWickRatioNorm = metrics.LowerWickRatioNorm;
+                lookbackEntry.Symmetry = metrics.Symmetry;
+                lookbackEntry.SymmetryNorm = metrics.SymmetryNorm;
+                lookbackEntry.HmaSlope = metrics.HmaSlope;
+                lookbackEntry.HmaSlopeNorm = metrics.HmaSlopeNorm;
+                lookbackEntry.HmaAngle = metrics.HmaAngle;
+                lookbackEntry.HmaAngleNorm = metrics.HmaAngleNorm;
+                lookbackEntry.PriceAngle = metrics.PriceAngle;
+                lookbackEntry.PriceAngleNorm = metrics.PriceAngleNorm;
+                lookbackEntry.HmaCloseDistance = metrics.HmaCloseDistance;
+                lookbackEntry.HmaCloseDistanceNorm = metrics.HmaCloseDistanceNorm;
+                lookbackEntry.ATR = metrics.ATR;
+                lookbackEntry.ATRNorm = metrics.ATRNorm;
+                lookbackEntry.EMA = metrics.EMA;
+                lookbackEntry.EMANorm = metrics.EMANorm;
+                lookbackEntry.EMADistance = metrics.EMADistance;
+                lookbackEntry.EMADistanceNorm = metrics.EMADistanceNorm;
+                lookbackEntry.CompositeScore = metrics.CompositeScore;
+                lookbackEntry.CompositeScoreNorm = metrics.CompositeScoreNorm;
+                lookbackEntry.MicroScore = metrics.MicroScore;
+                lookbackEntry.MicroScoreNorm = metrics.MicroScoreNorm;
+                lookbackEntry.Delta = metrics.Delta;
+                lookbackEntry.DeltaNorm = metrics.DeltaNorm;
+                lookbackEntry.DeltaOverRange = metrics.DeltaOverRange;
+                lookbackEntry.DeltaOverRangeNorm = metrics.DeltaOverRangeNorm;
+                lookbackEntry.PriceDelta = metrics.PriceDelta;
+                lookbackEntry.PriceDeltaNorm = metrics.PriceDeltaNorm;
+                lookbackEntry.DeltaPriceRatio = metrics.DeltaPriceRatio;
+                lookbackEntry.DeltaPriceRatioNorm = metrics.DeltaPriceRatioNorm;
+                lookbackEntry.MomentumAccel = metrics.MomentumAccel;
+                lookbackEntry.MomentumAccelNorm = metrics.MomentumAccelNorm;
+                lookbackEntry.MomentumShift = metrics.MomentumShift;
+                lookbackEntry.MomentumShiftNorm = metrics.MomentumShiftNorm;
+                lookbackEntry.MomentumNow = metrics.MomentumNow;
+                lookbackEntry.MomentumStart = metrics.MomentumStart;
+                lookbackEntry.MomentumPrev = metrics.MomentumPrev;
+                lookbackEntry.MomentumDelta = metrics.MomentumDelta;
+                lookbackEntry.MomentumSlope = metrics.MomentumSlope;
+                lookbackEntry.PrevMomentumNorm = metrics.PrevMomentumNorm;
+                lookbackEntry.HighWickRatio = metrics.HighWickRatio;
+                lookbackEntry.WickImbalanceRatio = metrics.WickImbalanceRatio;
+                lookbackEntry.WickImbalanceRatioNorm = metrics.WickImbalanceRatioNorm;
+                lookbackEntry.WickCountLast5 = metrics.WickCountLast5;
+                lookbackEntry.AvgBodyLast5 = metrics.AvgBodyLast5;
+                lookbackEntry.TotalWickImbalance = metrics.TotalWickImbalance;
+                lookbackEntry.HasBodyRatioSpike = metrics.HasBodyRatioSpike;
+                lookbackEntry.IsEngulfingShape = metrics.IsEngulfingShape;
+                lookbackEntry.IsReversalSignal = metrics.IsReversalSignal;
+                // --- Heikin Ashi ---
+                lookbackEntry.OpenHA = metrics.OpenHA;
+                lookbackEntry.HighHA = metrics.HighHA;
+                lookbackEntry.LowHA = metrics.LowHA;
+                lookbackEntry.CloseHA = metrics.CloseHA;
+                lookbackEntry.HaClose = metrics.HaClose;
+                lookbackEntry.HaOpen = metrics.HaOpen;
+                lookbackEntry.HaHigh = metrics.HaHigh;
+                lookbackEntry.HaLow = metrics.HaLow;
+                lookbackEntry.HeikinAshiDelta = metrics.HeikinAshiDelta;
+                lookbackEntry.HeikinAshiDeltaNorm = metrics.HeikinAshiDeltaNorm;
+
+                // Логване на всички LookbackEntry метрики
+                var values = lookbackFields.Select(f => f.GetValue(lookbackEntry)?.ToString() ?? "").ToArray();
+                var line = string.Join(",", values) + "\n";
+                File.AppendAllText(logFilePath, line);
+            }
+
+
+            // === Глобални кеш-базирани метрики за избраната зона ===
+            int from = Math.Min(startIndex, endIndex);
+            int to = Math.Max(startIndex, endIndex);
+            int zoneLength = to - from + 1;
+            double[] rsiZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] macdZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] signalZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] closeZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] highZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] lowZone = ArrayPool<double>.Shared.Rent(zoneLength);
+            double[] hmaZone = ArrayPool<double>.Shared.Rent(zoneLength);
+
+            try
+            {
+                for (int i = 0; i < zoneLength; i++)
+                {
+                    rsiZone[i] = _rsiCache[from + i];
+                    macdZone[i] = _macdCache[from + i];
+                    signalZone[i] = _signalCache[from + i];
+                    closeZone[i] = _priceCache[from + i];
+                    highZone[i] = Bars.HighPrices[from + i];
+                    lowZone[i] = Bars.LowPrices[from + i];
+                    hmaZone[i] = _weightedCloseCache[from + i];
+                }
+                var histZone = new double[zoneLength];
+                var rsiMacdDistZone = new double[zoneLength];
+                for (int i = 0; i < zoneLength; i++)
+                {
+                    histZone[i] = macdZone[i] - signalZone[i];
+                    rsiMacdDistZone[i] = Math.Abs(rsiZone[i] - macdZone[i]);
+                }
+
+            // --- Агрегиране на всички възможни глобални метрики по LookbackEntry ---
+            double SafeAvg(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Average() : 0; }
+            double SafeMax(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Max() : 0; }
+            double SafeMin(IEnumerable<double> arr) { return arr != null && arr.Any() ? arr.Min() : 0; }
+
+            // Body, Range, Volume, Wick, Momentum, Delta, Score и всички *_Norm
+            double[] bodyArr = ArrayPool<double>.Shared.Rent(Math.Max(1, closeZone.Length - 1));
+        int bodyLength = 0;
+        if (closeZone.Length > 1)
+        {
+            for (int i = 1; i < closeZone.Length; i++)
+            {
+                bodyArr[bodyLength++] = Math.Abs(closeZone[i] - closeZone[i - 1]);
+            }
+        }
+            double avgBody = bodyLength > 0 ? bodyArr.Take(bodyLength).Average() : 0;
+            double avgHigh = SafeAvg(highZone);
+            double avgLow = SafeAvg(lowZone);
+            double avgRange = avgHigh - avgLow;
+
+            double avgClose = SafeAvg(closeZone);
+            double avgBodyNorm = avgClose != 0 ? avgBody / avgClose : 0;
+            double avgRangeNorm = avgClose != 0 ? avgRange / avgClose : 0;
+            double avgBodyRatio = avgRange > 0 ? avgBody / avgRange : 0;
+            double avgBodyRatioNorm = avgClose != 0 ? avgBodyRatio / avgClose : 0;
+            double avgVolume = (Bars != null && Bars.TickVolumes.Count == closeZone.Length) ? SafeAvg(Bars.TickVolumes.Skip(from).Take(to - from + 1)) : 0;
+            double avgVolumeNorm = avgClose != 0 ? avgVolume / avgClose : 0;
+            double avgVolumePriceRatio = avgRange != 0 ? avgVolume / avgRange : 0;
+            double avgVolumePriceRatioNorm = avgClose != 0 ? avgVolumePriceRatio / avgClose : 0;
+            // Z-Score за RSI и Volume
+            double avgRsi = SafeAvg(rsiZone);
+            double zScoreRSI = 0, zScoreVolume = 0, zScoreRSINorm = 0, zScoreVolumeNorm = 0;
+            if (rsiZone.Length > 1)
+            {
+                double mean = avgRsi;
+                double std = Math.Sqrt(rsiZone.Select(x => Math.Pow(x - mean, 2)).Average());
+                zScoreRSI = std > 0 ? (rsiZone.Last() - mean) / std : 0;
+                zScoreRSINorm = avgClose != 0 ? zScoreRSI / avgClose : 0;
+            }
+            if (Bars != null && Bars.TickVolumes.Count == closeZone.Length && closeZone.Length > 1)
+            {
+                double mean = avgVolume;
+                double std = Math.Sqrt(Bars.TickVolumes.Skip(from).Take(to - from + 1).Select(x => Math.Pow(x - mean, 2)).Average());
+                zScoreVolume = std > 0 ? (Bars.TickVolumes[to] - mean) / std : 0;
+                zScoreVolumeNorm = avgClose != 0 ? zScoreVolume / avgClose : 0;
+            }
+            // Wick, Symmetry
+            double upperWick = avgHigh - avgClose;
+            double lowerWick = avgClose - avgLow;
+            double upperWickRatio = avgRange > 0 ? upperWick / avgRange : 0;
+            double lowerWickRatio = avgRange > 0 ? lowerWick / avgRange : 0;
+            double symmetry = Math.Abs(upperWickRatio - lowerWickRatio);
+            double symmetryNorm = avgClose != 0 ? symmetry / avgClose : 0;
+            // CompositeScore, MicroScore
+            double compositeScore = avgBodyRatio + (1 - symmetry);
+            double compositeScoreNorm = avgClose != 0 ? compositeScore / avgClose : 0;
+            double microScore = avgBodyRatio + (1 - symmetry); // или друга формула
+            double microScoreNorm = avgClose != 0 ? microScore / avgClose : 0;
+            // Delta, Momentum, PriceDelta, Ratio
+            double cumulativeDelta = closeZone.Length > 1 ? closeZone.Last() - closeZone.First() : 0;
+            double priceDelta = closeZone.Length > 1 ? closeZone.Last() - closeZone.First() : 0;
+            double priceDeltaNorm = avgClose != 0 ? priceDelta / avgClose : 0;
+            double delta = priceDelta;
+            double deltaNorm = avgClose != 0 ? delta / avgClose : 0;
+            double deltaOverRange = avgRange != 0 ? delta / (avgRange + 1e-6) : 0;
+            double deltaOverRangeNorm = avgClose != 0 ? deltaOverRange / avgClose : 0;
+            double deltaPriceRatio = priceDelta != 0 ? delta / priceDelta : 0;
+            double deltaPriceRatioNorm = avgClose != 0 ? deltaPriceRatio / avgClose : 0;
+            // Momentum
+            double momentum = priceDelta;
+            double momentumNorm = avgClose != 0 ? momentum / avgClose : 0;
+            double momentumRatio = priceDelta != 0 ? momentum / priceDelta : 0;
+            double momentumRatioNorm = avgClose != 0 ? momentumRatio / avgClose : 0;
+            double momentumAccel = 0, momentumAccelNorm = 0, momentumShift = 0, momentumShiftNorm = 0;
+            if (closeZone.Length > 3)
+            {
+                double mNow = closeZone[^1] - closeZone[^2];
+                double mPrev = closeZone[^2] - closeZone[^3];
+                momentumShift = mNow - mPrev;
+                momentumShiftNorm = avgClose != 0 ? momentumShift / avgClose : 0;
+                momentumAccel = (mNow - mPrev) - (mPrev - (closeZone[^3] - closeZone[^4]));
+                momentumAccelNorm = avgClose != 0 ? momentumAccel / avgClose : 0;
+            }
+            // HMA, HMA Slope, Angle, Dist
+            double hmaSlope = hmaZone.Length > 1 ? hmaZone.Last() - hmaZone.First() : 0;
+            double hmaSlopeNorm = avgClose != 0 ? hmaSlope / avgClose : 0;
+            double hmaAngle = Math.Atan2(hmaSlope, hmaZone.Length > 1 ? hmaZone.Length - 1 : 1) * (180.0 / Math.PI);
+            double hmaAngleNorm = avgClose != 0 ? hmaAngle / avgClose : 0;
+            double hmaCloseDistance = hmaZone.Length > 0 && closeZone.Length > 0 ? Math.Abs(hmaZone.Last() - closeZone.Last()) : 0;
+            double hmaCloseDistanceNorm = avgClose != 0 ? hmaCloseDistance / avgClose : 0;
+            // PriceAngle
+            double priceAngle = Math.Atan2(priceDelta, closeZone.Length > 1 ? closeZone.Length - 1 : 1) * (180.0 / Math.PI);
+            double priceAngleNorm = avgClose != 0 ? priceAngle / avgClose : 0;
+            // ATR (ако има _atr)
+            double atr = _atr != null && Bars != null ? SafeAvg(Enumerable.Range(from, to - from + 1).Select(i => _atr.Result[i])) : 0;
+            double atrNorm = avgClose != 0 ? atr / avgClose : 0;
+            // EMA (ако има)
+            double ema = 0, emaNorm = 0, emaDistance = 0, emaDistanceNorm = 0;
+            if (Bars != null)
+            {
+                ema = SafeAvg(Enumerable.Range(from, to - from + 1).Select(i => Bars.ClosePrices[i]));
+                emaNorm = avgClose != 0 ? ema / avgClose : 0;
+                emaDistance = closeZone.Length > 0 ? Math.Abs(closeZone.Last() - ema) : 0;
+                emaDistanceNorm = avgClose != 0 ? emaDistance / avgClose : 0;
+            }
+            // WCloseMinusHMA, WCloseDistNorm, WCloseMedianSpread (ако има weighted close)
+            double wCloseMinusHMA = 0, wCloseDistNorm = 0, wCloseMedianSpread = 0;
+            if (highZone.Length > 0 && lowZone.Length > 0 && closeZone.Length > 0 && hmaZone.Length > 0)
+            {
+                double weightedClose = (avgHigh + avgLow + 2 * avgClose) / 4;
+                wCloseMinusHMA = weightedClose - hmaZone.Last();
+                wCloseMedianSpread = weightedClose - ((avgHigh + avgLow) / 2);
+                wCloseDistNorm = avgRange > 0 ? wCloseMinusHMA / avgRange : 0;
+            }
+            // HighWickRatio, WickImbalanceRatio, WickImbalanceRatioNorm
+            double highWickRatio = (upperWick + lowerWick) / (avgRange + 1e-6);
+            double wickImbalanceRatio = highWickRatio;
+            double wickImbalanceRatioNorm = avgClose != 0 ? wickImbalanceRatio / avgClose : 0;
+            // WickCountLast5, AvgBodyLast5, TotalWickImbalance, HasBodyRatioSpike, IsEngulfingShape, IsReversalSignal (примерни агрегати)
+            int wickCountLast5 = 0, totalWickImbalance = 0, isEngulfingShape = 0, isReversalSignal = 0;
+            double avgBodyLast5 = 0;
+            bool hasBodyRatioSpike = false;
+            if (bodyLength >= 5)
+            {
+                double sum = 0; for (int i = bodyLength - 5; i < bodyLength; i++) sum += bodyArr[i]; avgBodyLast5 = sum / 5;
+                // Примерна логика за spike
+                for (int i = bodyLength - 5; i < bodyLength; i++) if (bodyArr[i] > avgBody * 1.5) { hasBodyRatioSpike = true; break; }
+            }
+
+            double priceSlopeNorm = avgClose != 0 ? priceDelta / avgClose : 0;
+            var globalMetrics = new Dictionary<string, string>();
+            // --- Основни метрики ---
+            globalMetrics.Add("avgRsi", SafeAvg(rsiZone));
+            globalMetrics.Add("maxRsi", SafeMax(rsiZone));
+            globalMetrics.Add("minRsi", SafeMin(rsiZone));
+            globalMetrics.Add("avgMacd", SafeAvg(macdZone));
+            globalMetrics.Add("maxMacd", SafeMax(macdZone));
+            globalMetrics.Add("minMacd", SafeMin(macdZone));
+            globalMetrics.Add("macdSpread", SafeMax(macdZone) - SafeMin(macdZone));
+            globalMetrics.Add("macdDelta", macdZone.Length > 1 ? macdZone.Last() - macdZone.First() : 0);
+            globalMetrics.Add("avgSignal", SafeAvg(signalZone));
+            globalMetrics.Add("maxSignal", SafeMax(signalZone));
+            globalMetrics.Add("minSignal", SafeMin(signalZone));
+            globalMetrics.Add("avgHistStrength", SafeAvg(histZone.Select(Math.Abs)));
+            globalMetrics.Add("histogramDelta", histZone.Length > 1 ? histZone.Last() - histZone.First() : 0);
+            globalMetrics.Add("avgRSIMACDDistance", SafeAvg(rsiMacdDistZone));
+            // --- Weighted Close ---
+            globalMetrics.Add("wCloseMinusHMA", wCloseMinusHMA);
+            globalMetrics.Add("wCloseDistNorm", wCloseDistNorm);
+            globalMetrics.Add("wCloseMedianSpread", wCloseMedianSpread);
+            // --- HMA ---
+            globalMetrics.Add("hmaSlope", hmaSlope);
+            globalMetrics.Add("hmaSlopeNorm", hmaSlopeNorm);
+            globalMetrics.Add("hmaAngle", hmaAngle);
+            globalMetrics.Add("hmaAngleNorm", hmaAngleNorm);
+            globalMetrics.Add("hmaCloseDistance", hmaCloseDistance);
+            globalMetrics.Add("hmaCloseDistanceNorm", hmaCloseDistanceNorm);
+            // --- ATR ---
+            globalMetrics.Add("atr", atr);
+            globalMetrics.Add("atrNorm", atrNorm);
+            // --- EMA ---
+            globalMetrics.Add("ema", ema);
+            globalMetrics.Add("emaNorm", emaNorm);
+            globalMetrics.Add("emaDistance", emaDistance);
+            globalMetrics.Add("emaDistanceNorm", emaDistanceNorm);
+            // --- Price Angle ---
+            globalMetrics.Add("priceAngle", priceAngle);
+            globalMetrics.Add("priceAngleNorm", priceAngleNorm);
+            // --- Body, Range, Volume, Ratios ---
+            globalMetrics.Add("avgBody", avgBody);
+            globalMetrics.Add("avgBodyNorm", avgBodyNorm);
+            globalMetrics.Add("avgRange", avgRange);
+            globalMetrics.Add("avgRangeNorm", avgRangeNorm);
+            globalMetrics.Add("avgBodyRatio", avgBodyRatio);
+            globalMetrics.Add("avgBodyRatioNorm", avgBodyRatioNorm);
+            globalMetrics.Add("avgVolume", avgVolume);
+            globalMetrics.Add("avgVolumeNorm", avgVolumeNorm);
+            globalMetrics.Add("avgVolumePriceRatio", avgVolumePriceRatio);
+            globalMetrics.Add("avgVolumePriceRatioNorm", avgVolumePriceRatioNorm);
+            // --- Z-Score ---
+            globalMetrics.Add("zScoreRSI", zScoreRSI);
+            globalMetrics.Add("zScoreRSINorm", zScoreRSINorm);
+            globalMetrics.Add("zScoreVolume", zScoreVolume);
+            globalMetrics.Add("zScoreVolumeNorm", zScoreVolumeNorm);
+            // --- Symmetry ---
+            globalMetrics.Add("symmetry", symmetry);
+            globalMetrics.Add("symmetryNorm", symmetryNorm);
+            // --- Wick Imbalance ---
+            int upperWickImbalanceCount = 0;
+            int lowerWickImbalanceCount = 0;
+            if (closeZone.Length >= 5)
+            {
+                for (int i = Math.Max(0, closeZone.Length - 5); i < closeZone.Length - 1; i++)
+                {
+                    double barHigh = highZone[i];
+                    double barLow = lowZone[i];
+                    double barClose = closeZone[i];
+                    double barOpen = i > 0 ? closeZone[i - 1] : closeZone[i];
+                    double barRange = barHigh - barLow;
+                    double barUpperWick = barHigh - Math.Max(barClose, barOpen);
+                    double barLowerWick = Math.Min(barClose, barOpen) - barLow;
+                    if (barRange > 0)
+                    {
+                        if (barUpperWick / barRange > 0.3) upperWickImbalanceCount++;
+                        if (barLowerWick / barRange > 0.3) lowerWickImbalanceCount++;
+                    }
+                }
+            }
+            globalMetrics.Add("upperWickImbalanceCount", upperWickImbalanceCount);
+            globalMetrics.Add("lowerWickImbalanceCount", lowerWickImbalanceCount);
+            globalMetrics.Add("totalWickImbalance", Math.Abs(upperWickImbalanceCount - lowerWickImbalanceCount));
+            // --- Delta, Momentum, Ratios ---
+            globalMetrics.Add("deltaOverRange", deltaOverRange);
+            globalMetrics.Add("momentumRatio", momentumRatio);
+            globalMetrics.Add("isReversalSignal", isReversalSignal);
+            double bodyRatioDev1 = 0, bodyRatioDev5 = 0;
+            if (closeZone.Length >= 5)
+            {
+                int length = Math.Min(5, closeZone.Length - 1);
+                double[] bodyRatios = ArrayPool<double>.Shared.Rent(length);
+                try
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        int idx = closeZone.Length - 2 - i;
+                        double barRange = highZone[idx] - lowZone[idx];
+                        bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+                    }
+                    double sum = 0; for (int i = 0; i < length; i++) sum += bodyRatios[i]; double avgBodyRatio5 = sum / length;
+                    bodyRatioDev1 = avgBodyRatio - avgBodyRatio5;
+                }
+                finally
+                {
+                    ArrayPool<double>.Shared.Return(bodyRatios);
+                }
+            }
+            if (closeZone.Length >= 20)
+            {
+                int length = Math.Min(20, closeZone.Length - 1);
+                double[] bodyRatios = ArrayPool<double>.Shared.Rent(length);
+                try
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        int idx = closeZone.Length - 2 - i;
+                        double barRange = highZone[idx] - lowZone[idx];
+                        bodyRatios[i] = barRange > 0 ? bodyArr[idx] / barRange : 0;
+                    }
+                    double sum = 0; for (int i = 0; i < length; i++) sum += bodyRatios[i]; double avgBodyRatio20 = sum / length;
+                    bodyRatioDev5 = avgBodyRatio - avgBodyRatio20;
+                }
+                finally
+                {
+                    ArrayPool<double>.Shared.Return(bodyRatios);
+                }
+            }
+            globalMetrics.Add("bodyRatioDev1", bodyRatioDev1);
+            globalMetrics.Add("bodyRatioDev5", bodyRatioDev5);
+            globalMetrics.Add("hasBodyRatioSpike", hasBodyRatioSpike);
+            int spikePotentialIndex = 0;
+            if (bodyLength >= 5) { for (int i = bodyLength - 5; i < bodyLength; i++) if (bodyArr[i] > avgBody * 1.5) spikePotentialIndex++; }
+            globalMetrics.Add("spikePotentialIndex", spikePotentialIndex);
+            globalMetrics.Add("momentumShift", momentumShift);
+            globalMetrics.Add("highWickRatio", highWickRatio);
+            globalMetrics.Add("isEngulfingShape", isEngulfingShape);
+            double prevBody = (closeZone.Length > 1) ? Math.Abs(closeZone[^2] - closeZone[^3]) : 0;
+            int prevIsBullish = (closeZone.Length > 2 && closeZone[^2] > closeZone[^3]) ? 1 : 0;
+            globalMetrics.Add("prevBody", prevBody);
+            globalMetrics.Add("prevIsBullish", prevIsBullish);
+            // --- Norms ---
+            globalMetrics.Add("bodyNorm", avgBodyNorm);
+            globalMetrics.Add("rangeNorm", avgRangeNorm);
+            double prevMomentumNorm = (closeZone.Length > 3 && closeZone[^3] != 0) ? (closeZone[^2] - closeZone[^3]) / closeZone[^3] : 0;
+            globalMetrics.Add("prevMomentumNorm", prevMomentumNorm);
+            globalMetrics.Add("momentumAccelNorm", momentumAccelNorm);
+            globalMetrics.Add("priceChangeNorm", priceDeltaNorm);
+            globalMetrics.Add("hmaSlopeNorm", hmaSlopeNorm);
+            globalMetrics.Add("priceSlopeNorm", priceSlopeNorm);
+            globalMetrics.Add("deltaNorm", deltaNorm);
+            globalMetrics.Add("hmaCloseDistNorm", hmaCloseDistanceNorm);
+            globalMetrics.Add("volumePriceRatioNorm", avgVolumePriceRatioNorm);
+            globalMetrics.Add("deltaOverRangeNorm", deltaOverRangeNorm);
+            globalMetrics.Add("compositeScoreNorm", compositeScoreNorm);
+            double avgCloseNonZero = avgClose != 0 ? avgClose : 1;
+            globalMetrics.Add("wickTopNorm", upperWick / avgCloseNonZero);
+            globalMetrics.Add("wickBottomNorm", lowerWick / avgCloseNonZero);
+            globalMetrics.Add("upperWickRatioNorm", upperWickRatio);
+            globalMetrics.Add("lowerWickRatioNorm", lowerWickRatio);
+            // --- Heikin Ashi ---
+            double avgOpen = closeZone.Length > 1 ? closeZone[0] : avgClose;
+            double open_ha = (avgOpen + avgClose) / 2;
+            double high_ha = avgHigh;
+            double low_ha = avgLow;
+            double closePrice = closeZone.Length > 0 ? closeZone[^1] : 0;
+            double haClose = (avgOpen + avgHigh + avgLow + avgClose) / 4;
+            double haOpen = (open_ha + haClose) / 2;
+            double haHigh = Math.Max(Math.Max(high_ha, haOpen), haClose);
+            double haLow = Math.Min(Math.Min(low_ha, haOpen), haClose);
+            double heikinAshiDelta = haClose - haOpen;
+            double heikinAshiDeltaNorm = avgClose != 0 ? heikinAshiDelta / avgClose : 0;
+            globalMetrics.Add("open_ha", open_ha);
+            globalMetrics.Add("high_ha", high_ha);
+            globalMetrics.Add("low_ha", low_ha);
+            globalMetrics.Add("closePrice", closePrice);
+            globalMetrics.Add("haClose", haClose);
+            globalMetrics.Add("haOpen", haOpen);
+            globalMetrics.Add("haHigh", haHigh);
+            globalMetrics.Add("haLow", haLow);
+            globalMetrics.Add("heikinAshiDelta", heikinAshiDelta);
+            globalMetrics.Add("heikinAshiDeltaNorm", heikinAshiDeltaNorm);
+
+    // Raw OHLC and Volume data
+    globalMetrics.Add("open", closeZone.Length > 1 ? closeZone[0] : avgClose);
+    globalMetrics.Add("high", avgHigh);
+    globalMetrics.Add("low", avgLow);
+    globalMetrics.Add("close", closeZone.Length > 0 ? closeZone[^1] : avgClose);
+    globalMetrics.Add("tickVolume", Bars != null && Bars.TickVolumes.Count > to ? Bars.TickVolumes[to] : 0);
+            // --- Analyzer metrics (ако са налични) ---
+            if (_analyzer != null)
+            {
+                globalMetrics.Add("RsiSlope", _analyzer.RsiSlope);
+                globalMetrics.Add("MacdSlope", _analyzer.MacdSlope);
+                globalMetrics.Add("RsiDelta", _analyzer.RsiDelta);
+                globalMetrics.Add("MacdDelta", _analyzer.MacdDelta);
+                globalMetrics.Add("RsiMACDSpread", _analyzer.RsiMACDSpread);
+                globalMetrics.Add("RsiMACDSpreadDelta", _analyzer.RsiMACDSpreadDelta);
+                globalMetrics.Add("AvgRSIMACDDistance", _analyzer.AvgRSIMACDDistance);
+                globalMetrics.Add("DeltaRSIMACDDistance", _analyzer.DeltaRSIMACDDistance);
+                globalMetrics.Add("MacdLineSpread", _analyzer.MacdLineSpread);
+                globalMetrics.Add("MacdSpreadAcceleration", _analyzer.MacdSpreadAcceleration);
+                globalMetrics.Add("MacdSignalSlope", _analyzer.MacdSignalSlope);
+                globalMetrics.Add("HistDelta", _analyzer.HistDelta);
+                globalMetrics.Add("HistSlope", _analyzer.HistSlope);
+                globalMetrics.Add("HistStrength", _analyzer.HistStrength);
+                globalMetrics.Add("HistAcceleration", _analyzer.HistAcceleration);
+                globalMetrics.Add("HistogramDivergence", _analyzer.HistogramDivergence ? 1 : 0);
+                globalMetrics.Add("RsiAcceleration", _analyzer.RsiAcceleration);
+                globalMetrics.Add("MacdAcceleration", _analyzer.MacdAcceleration);
+                globalMetrics.Add("RsiMacdSlopeDiff", _analyzer.RsiMacdSlopeDiff);
+                globalMetrics.Add("RsiSlopeDeg", _analyzer.RsiSlopeDeg);
+                globalMetrics.Add("MacdSlopeDeg", _analyzer.MacdSlopeDeg);
+                globalMetrics.Add("HistSlopeDeg", _analyzer.HistSlopeDeg);
+                globalMetrics.Add("MacdSignalSlopeDeg", _analyzer.MacdSignalSlopeDeg);
+                globalMetrics.Add("WCloseMinusHMA", _analyzer.WCloseMinusHMA);
+                globalMetrics.Add("WCloseDistNorm", _analyzer.WCloseDistNorm);
+                globalMetrics.Add("WCloseMedianSpread", _analyzer.WCloseMedianSpread);
+                globalMetrics.Add("RsiMacdCross", _analyzer.RsiMacdCross);
+                globalMetrics.Add("RsiCrossesAboveMacd", _analyzer.RsiCrossesAboveMacd);
+                globalMetrics.Add("RsiCrossesBelowMacd", _analyzer.RsiCrossesBelowMacd);
+            }
+        }
+        finally
+        {
+            ArrayPool<double>.Shared.Return(rsiZone);
+            ArrayPool<double>.Shared.Return(macdZone);
+            ArrayPool<double>.Shared.Return(signalZone);
+            ArrayPool<double>.Shared.Return(closeZone);
+            ArrayPool<double>.Shared.Return(highZone);
+            ArrayPool<double>.Shared.Return(lowZone);
+            ArrayPool<double>.Shared.Return(hmaZone);
+            ArrayPool<double>.Shared.Return(bodyArr);
+        }
+
+        protected override void OnStop()
+        {
+            Dispose();
+        }
+    }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    if (_logBuffer?.Length > 0)
+                    {
+                        string bufferContent;
+                        lock (_logLock)
+                        {
+                            bufferContent = _logBuffer.ToString();
+                            _logBuffer.Clear();
+                        }
+                        Task.Run(async () => {
+                            await _fileSemaphore.WaitAsync();
+                            try { await File.AppendAllTextAsync(logFilePath, bufferContent); }
+                            catch (Exception ex) { Print($"Error: {ex.Message}"); }
+                            finally { _fileSemaphore.Release(); }
+                        });
+                    }
+                    _analyzer?.Dispose();
+                    _fileSemaphore?.Dispose();
+                }
+                _analyzer = null;
+                _disposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        }
+    }
+}
