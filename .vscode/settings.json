@@ -1,0 +1,52 @@
+{
+	"telemetry.telemetryLevel": "off",
+
+	"files.exclude": {
+		"**/.git": true,
+		"**/.DS_Store": true,
+		"**/__pycache__": true,
+		"**/.venv": true,
+		"**/venv": true,
+		"**/bin": true,
+		"**/obj": true
+	},
+
+	"files.watcherExclude": {
+		"**/.git/**": true,
+		"**/__pycache__/**": true,
+		"**/.venv/**": true,
+		"**/venv/**": true,
+		"**/bin/**": true,
+		"**/obj/**": true
+	},
+
+	"search.exclude": {
+		"**/.git": true,
+		"**/__pycache__": true,
+		"**/.venv": true,
+		"**/venv": true,
+		"**/bin": true,
+		"**/obj": true
+	},
+
+	"python.analysis.indexing": true,
+	"python.analysis.indexingThreads": 0,
+	"python.analysis.cacheFolderPath": "${workspaceFolder}/.ai-cache/pylance",
+	"python.analysis.typeCheckingMode": "basic",
+	"python.analysis.exclude": [
+		"**/.git",
+		"**/__pycache__",
+		"**/.venv",
+		"**/venv",
+		"**/bin",
+		"**/obj"
+	],
+
+	"dotnet.server.useOmnisharp": false,
+	"csharp.suppressDotnetRestoreNotification": true,
+	"csharp.referencesCodeLens.enabled": false,
+	"csharp.testsCodeLens.enabled": false,
+	"csharp.format.enable": true,
+	"csharp.inlayHints.parameters.enabled": true,
+	"csharp.inlayHints.types.enabled": true
+}
