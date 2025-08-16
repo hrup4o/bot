@@ -182,3 +182,9 @@ Common interface for engines:
   - Wires `ChartSelectionLogger` with `RegisterFeatureProvider` and a stable header list when schema stabilizes
 - The logger contains integration stubs for modules not yet in this repository (`IndicatorSeriesBundle`, `OhlcvMetricsEngine`, `OptimalTCNSpikeEngine`, `HybridRawFeatureEngine`). Replace or implement these as new modules or adapt to the current `IFeatureEngine` pattern.
 - If the project must enforce “raw-only” features (no z-scores/flags/thresholds), refactor `HeikenAshiMetricsEngine` and `SpikeHeuristicsEngine` to remove boolean flags and z-score outputs, or provide parallel raw-only variants.
+
+## Solution and Targets
+- Solution: `MarketSignals.sln`
+- Projects:
+  - `MarketSignals.Core` → TargetFramework: `net6.0`
+  - `MarketSignals.Tests` → TargetFramework: `net6.0`; references `MarketSignals.Core`; packages: xUnit, coverlet, Microsoft.NET.Test.Sdk
