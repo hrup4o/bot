@@ -142,25 +142,58 @@ Last updated: {UTC}
   - `VelocityWindows`, `AccelerationWindows`, `RatioWindows`, `StdWindows`, `MomentWindows`, `CorrWindows`
   - `ER_Windows`, `RS_Windows`, `RV_Windows`, `VWAP_Windows`, `Drawdown_Windows`, `Entropy_Windows`
   - `SpectralWindowsN`, `FD_Windows`, `HiguchiKMax`
-- Features (examples; all raw):
-  - Price velocity/acceleration, range/volume ratios
-  - Std/skew/kurt; ACF1/2/3 + PACF1; robust median/MAD/dev-from-median
-  - Spectral low/high ratio (DFT 16/32); slope stability; liquidity ratios
-  - Realized family: RV/BPV/Quarticity/RealizedRange; VWAP and DevVWAP
-  - Drawdown/Runup (windowed); entropy of sign(returns); FD (Higuchi/Katz)
+- Public API / Classes:
+  - `HybridRawFeatureConfig` (above)
+  - `HybridRawFeatureEngine`
+    - `Reset()`
+    - `ComputeNext(OhlcvBar bar, OhlcvMetrics? ohlc = null, HeikenAshiMetrics? ha = null)` → flat feature map/DTO
+- Feature groups (raw; examples of keys):
+  - Price dynamics: velocity ΔClose_w, acceleration Δ(velocity)_w
+  - Ratios: `Range/MA_Range_w`, `Volume/MA_Volume_w`
+  - Statistics: `Std(Close)_w`, `Skew(Close)_w`, `Kurt(Close)_w`
+  - Correlations: `Corr(ΔClose, Volume)_w`, lagged corr (optional), ACF1/2/3, PACF1
+  - Robust: `Median_w(Close)`, `MAD_w(Close)`, `DevFromMedian_w`
+  - Spectral: `SpecLHRatio_N` for N ∈ {16,32}
+  - Slope stability: `Std(LinearSlope over 4 subwindows)`
+  - Liquidity: `Range/Volume`, `Body/Volume`, and their windowed ratios vs avg
+  - Realized family: `RV_w`, `BPV_w`, `Quarticity_w`, `RealizedRange_w`
+  - VWAP: `VWAP_w`, `DevVWAP_w`
+  - Extremes: `MaxDrawdown_w`, `MaxRunup_w`
+  - Entropy: Shannon entropy of sign(returns)_w
+  - Fractal dimension: `FD_Higuchi_w`, `FD_Katz_w` (short windows)
+- Helpers (typical): `HiguchiFD`, `KatzFD`, `ComputeRV/BPV/Quarticity`, `ComputeVWAP`, `ComputeSpectralLHRatio`, `ComputeSlopeStability`
 
 ## MarketSignals.Core/Metrics/OptimalTCNSpikeEngine.cs
 - Namespace: `MarketSignals.Core.Metrics`
 - Purpose: Spike-focused raw feature set for TCN; zero interpretation.
-- Features:
-  - TIER 1–16: OHLCV raw, geometry, velocities/accel, ratios, moments, cross-correlations, momentum/divergence, structural, SMA distances, consecutive patterns, time encodings, order-flow proxies, volatility ratios/momentum
-  - TIER 17: FractalDim32/64 (configurable)
-  - TIER 18: ER*, RS*, RV/BPV/RQ/RealRange, VWAP, DevVWAP
-  - TIER 19: ACF1/2/3, PACF1, SignImbalance/PosShare, Median/MAD/DevMedian, SpecLHRatio16/32
-  - TIER 20: SlopeStabilityShort, Liquidity ratios, MaxDrawdown/MaxRunup, EntropySign*
-- Implementation notes:
-  - Past-only where relevant; no thresholds/normalization; .NET 6
-  - Cleaned duplicates; unified naming; helper methods: ComputeER/RS/RV/BPV/RQ/RealizedRange/VWAP/ACF/SignImbalance/Robust/SpectralLHRatio/SlopeStability/RatioSeries/MaxDD/MaxRU/SignEntropy
+- Config:
+  - Windows: `VelocityWindows`, `RatioWindows`, `StatisticalWindows`, `MomentumWindows`, `CorrelationWindows`
+  - Spike windows: `ER_Windows`, `RS_Windows`, `RV_Windows`, `VWAP_Windows`, `Drawdown_Windows`, `Entropy_Windows`, `FD_Windows`, `SpectralWindowsN`
+- Public API / Classes:
+  - `OptimalTCNConfig` (above)
+  - `OptimalTCNFeatures` (flat DTO; properties by tiers below)
+  - `OptimalTCNSpikeEngine`
+    - `Reset()`
+    - `ComputeNext(OhlcvBar bar)` → `OptimalTCNFeatures`
+- Features by tier (raw):
+  - TIER 1–2 (OHLCV, geometry): `Open/High/Low/Close/Volume`, `Range/Body/UpperWick/LowerWick/BodyRatio/UpperWickRatio/LowerWickRatio/WickImbalance`
+  - TIER 3–4 (dynamics): `PriceVelocity{1,3,5,10,20}`, `PriceAcceleration{3,5,10}`
+  - TIER 5 (ratios): `RangeRatio{3,5,10,20,50}`, `VolumeRatio{3,5,10,20,50}`
+  - TIER 6–7 (moments): `PriceStdDev{10,20,50}`, `VolumeStdDev{10,20,50}`, `RangeStdDev{10,20,50}`, `PriceSkewness{10,20}`, `PriceKurtosis{10,20}`, `VolumeSkewness{10,20}`
+  - TIER 8 (cross-corr): `PriceVolumeCorr{5,10,20}`, `RangeVolumeCorr{5,10,20}`
+  - TIER 9–10 (momentum): `PriceMomentum{3,5,10,20}`, `VolumeMomentum{3,5,10,20}`, `MomentumDivergence{3,5,10}`
+  - TIER 11–12 (structure/SMA): distances to highs/lows `{20,50}` (abs/%), `DistanceToSMA{5,10,20,50}` (abs/%)
+  - TIER 13 (runs): `ConsecutiveUp/DownBars`, `ConsecutiveUp/DownBodies`, `ConsecutiveHigh/LowVolume`, `ConsecutiveWide/TightRanges`
+  - TIER 14 (time): `HourSin/Cos`, `DayOfWeekSin/Cos`, `MinuteSin/Cos`
+  - TIER 15 (order-flow proxies): `VolumePerPoint`, `VolumePerRange`, `PriceEfficiency`, `BuyPressureProxy`, `SellPressureProxy`
+  - TIER 16 (volatility): `VolatilityRatio{5,10,20,50}` (past-only), `VolatilityMomentum{5,10,20}`
+  - TIER 17 (fractal): `FractalDim{32,64}`
+  - TIER 18 (realized/VWAP/etc.): `ER{10,20,50}`, `RS{20,50,100}`, `RV{10,20,50}`, `BPV{10,20,50}`, `RQ{10,20,50}`, `RealRange{10,20,50}`, `VWAP{10,20,50}`, `DevVWAP{10,20,50}`
+  - TIER 19 (ACF/robust/spectral/sign): `ACF{1,2,3}`, `PACF1`, `SignImbalance{20,50,100}`, `PosShare{20,50,100}`, `Median{10,20,50}`, `MAD{10,20,50}`, `DevMedian{10,20,50}`, `SpecLHRatio{16,32}`
+  - TIER 20 (stability/liquidity/DD/RU/entropy): `SlopeStabilityShort`, `RangePerVolume`, `BodyPerVolume`, `RangePerVolumeRatio{20,50}`, `BodyPerVolumeRatio{20,50}`, `MaxDrawdown{20,50,100}`, `MaxRunup{20,50,100}`, `EntropySign{20,50,100}`
+- Helpers (selected): `ComputeER/RS/RV/BPV/RQ/RealizedRange/VWAP/ACF/SignImbalance/Robust/SpectralLHRatio/SlopeStability/RatioSeries/MaxDD/MaxRU/SignEntropy`
+- Notes:
+  - Past-only where applicable; no thresholds/normalization; .NET 6
 
 ## Data Flow Summary
 - Broker feed → `OhlcvBar` →
