@@ -9,6 +9,8 @@ Last updated: {UTC}
 - MarketSignals.Core/RawData/InMemoryBarFeed.cs
 - MarketSignals.Core/Metrics/OhlcvMetricsEngine.cs
 - MarketSignals.Core/Metrics/HeikenAshiMetricsEngine.cs
+- MarketSignals.Core/Hybrid/HybridRawFeatureEngine.cs
+- MarketSignals.Core/Metrics/OptimalTCNSpikeEngine.cs
 
 ## Indicators/IndicatorEngine.cs
 - Namespace: `Indicators`
@@ -133,10 +135,39 @@ Last updated: {UTC}
 - Integration:
   - Feed with `OhlcvBar`; flatten metrics in FeatureBuilder → `ChartSelectionLogger`
 
+## MarketSignals.Core/Hybrid/HybridRawFeatureEngine.cs
+- Namespace: `MarketSignals.Core.Hybrid`
+- Purpose: Additional raw features not covered by other engines; no thresholds/normalization.
+- Config:
+  - `VelocityWindows`, `AccelerationWindows`, `RatioWindows`, `StdWindows`, `MomentWindows`, `CorrWindows`
+  - `ER_Windows`, `RS_Windows`, `RV_Windows`, `VWAP_Windows`, `Drawdown_Windows`, `Entropy_Windows`
+  - `SpectralWindowsN`, `FD_Windows`, `HiguchiKMax`
+- Features (examples; all raw):
+  - Price velocity/acceleration, range/volume ratios
+  - Std/skew/kurt; ACF1/2/3 + PACF1; robust median/MAD/dev-from-median
+  - Spectral low/high ratio (DFT 16/32); slope stability; liquidity ratios
+  - Realized family: RV/BPV/Quarticity/RealizedRange; VWAP and DevVWAP
+  - Drawdown/Runup (windowed); entropy of sign(returns); FD (Higuchi/Katz)
+
+## MarketSignals.Core/Metrics/OptimalTCNSpikeEngine.cs
+- Namespace: `MarketSignals.Core.Metrics`
+- Purpose: Spike-focused raw feature set for TCN; zero interpretation.
+- Features:
+  - TIER 1–16: OHLCV raw, geometry, velocities/accel, ratios, moments, cross-correlations, momentum/divergence, structural, SMA distances, consecutive patterns, time encodings, order-flow proxies, volatility ratios/momentum
+  - TIER 17: FractalDim32/64 (configurable)
+  - TIER 18: ER*, RS*, RV/BPV/RQ/RealRange, VWAP, DevVWAP
+  - TIER 19: ACF1/2/3, PACF1, SignImbalance/PosShare, Median/MAD/DevMedian, SpecLHRatio16/32
+  - TIER 20: SlopeStabilityShort, Liquidity ratios, MaxDrawdown/MaxRunup, EntropySign*
+- Implementation notes:
+  - Past-only where relevant; no thresholds/normalization; .NET 6
+  - Cleaned duplicates; unified naming; helper methods: ComputeER/RS/RV/BPV/RQ/RealizedRange/VWAP/ACF/SignImbalance/Robust/SpectralLHRatio/SlopeStability/RatioSeries/MaxDD/MaxRU/SignEntropy
+
 ## Data Flow Summary
 - Broker feed → `OhlcvBar` →
   - `OhlcvMetricsEngine.ComputeNext` → OHLC raw metrics
   - `HeikenAshiMetricsEngine.ComputeNext` → HA raw metrics
   - `IndicatorEngine.ComputeSnapshot` (given cTrader indicator series) → indicator metrics
-- `ChartSelectionLogger.LogRange` writes combined rows (indicator + OHLC + HA) to CSV (+ `.schema.json`).
-- Preprocessing (separate step): time split; compute normalization params on train; apply to val/test; optionally derive boolean flags (spike/impulse/divergence) there.
+  - `HybridRawFeatureEngine.ComputeNext` → additional raw features
+  - `OptimalTCNSpikeEngine.ComputeNext` → spike-focused raw features
+- `ChartSelectionLogger.LogRange` writes combined rows (indicator + OHLC + HA + hybrid/spike) to CSV (+ `.schema.json`).
+- Preprocessing (separate step): time split; compute normalization params on train; apply to val/test; optional boolean feature derivation (spike/impulse/divergence) post-train.
