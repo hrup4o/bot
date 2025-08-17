@@ -1,0 +1,12 @@
+/workspace/MarketSignals.Core/bin/Debug/net6.0/MarketSignals.Core.deps.json
+/workspace/MarketSignals.Core/bin/Debug/net6.0/MarketSignals.Core.dll
+/workspace/MarketSignals.Core/bin/Debug/net6.0/MarketSignals.Core.pdb
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.csproj.AssemblyReference.cache
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.GeneratedMSBuildEditorConfig.editorconfig
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.AssemblyInfoInputs.cache
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.AssemblyInfo.cs
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.csproj.CoreCompileInputs.cache
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.dll
+/workspace/MarketSignals.Core/obj/Debug/net6.0/refint/MarketSignals.Core.dll
+/workspace/MarketSignals.Core/obj/Debug/net6.0/MarketSignals.Core.pdb
+/workspace/MarketSignals.Core/obj/Debug/net6.0/ref/MarketSignals.Core.dll
